@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon-64.png" type="image/png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#A22036" />
+    <!-- Installable, so the team reaches the board by tapping an icon rather
+         than remembering an address. iOS reads the apple- tags and
+         ignores the manifest's display mode; everything else reads the
+         manifest. -->
+    <!-- The two faces.
+         Inter sets the interface. It was named first in the CSS stack from the
+         beginning and never actually fetched, so every machine fell through to
+         its own system font and the board looked different on each of them.
+         Nekst sets the page's one headline and large numbers (the owner
+         confirmed its web licence on 7 October 2026). It is served from this
+         board, /fonts, in the two weights a headline uses; the bold one is
+         preloaded below because it is on the first screen everybody sees.
+         It has no Uzbek ʻ ʼ — those fall to Inter, the next face in the
+         stack. The wordmark is still the logo artwork, never typed.
+         Google serves Inter by unicode-range, so a Latin-only reader never
+         downloads the Cyrillic.
+
+         A stylesheet in the head blocks the first paint until it answers, and
+         on a phone on mobile data in Tashkent that is somebody looking at a
+         white screen waiting for a font. Both CSS stacks name real system
+         fallbacks, so the board has nothing to wait for: the sheet is fetched
+         at print media, which does not block rendering, and is promoted to
+         all the moment it lands. display=swap then does the changeover. If
+         Google is slow, filtered, or down, the board opens anyway in the
+         machine's own font instead of not opening at all. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" /></noscript>
+    <link rel="preload" href="/fonts/Nekst-Bold.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SATashkent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="SATashkent" />
+    <!-- Windows tiles read these rather than the manifest. -->
+    <meta name="msapplication-TileColor" content="#A22036" />
+    <meta name="msapplication-TileImage" content="/icon-192.png" />
+    <title>SATashkent · Marketing Dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

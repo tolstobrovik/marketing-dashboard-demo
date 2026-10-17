@@ -1,0 +1,244 @@
+import { dataIsFresh } from './toast.js'
+
+const TOKEN_KEY = 'satashkent_token'
+
+// ---- little comfort cookies (login prefill, remember-me choice) ----
+export const setCookie = (name, value, days = 30) => {
+  try {
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${days * 86400}; samesite=lax`
+  } catch { /* ok */ }
+}
+export const getCookie = (name) => {
+  try {
+    const hit = document.cookie.split('; ').find((c) => c.startsWith(name + '='))
+    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null
+  } catch { return null }
+}
+
+// The token lives in localStorage when "remember me" is on (survives closing
+// the browser, a week-long JWT), in sessionStorage otherwise (signing out
+// happens by itself when the browser closes).
+export const getToken = () => localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
+export const setToken = (t, remember = true) => {
+  localStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+  if (t) (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, t)
+}
+
+// Instant-boot cache: pages render the last known data immediately and swap
+// in fresh data when the network answers. Cleared on login/logout so one
+// account never sees another's leftovers. Quota errors are silently ignored —
+// the cache is an accelerator, never a requirement.
+const CACHE_PREFIX = 'satashkent_cache:'
+export const cache = {
+  get(key) {
+    try { return JSON.parse(localStorage.getItem(CACHE_PREFIX + key)) } catch { return null }
+  },
+  set(key, value) {
+    try { localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(value)) } catch { /* quota — skip */ }
+  },
+  clear() {
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith(CACHE_PREFIX)) localStorage.removeItem(k)
+      }
+    } catch { /* ignore */ }
+    // …and the in-memory ones below. They live as long as the tab, not the
+    // account: signed out and in as somebody else, the next modal was handed
+    // the last account's roster from the memo, a poll spliced in the rows
+    // they had just written, and an ETag answered "unchanged" about a list
+    // the new account had never been sent.
+    memo.clear(); recentWrites.clear(); etags.clear()
+  },
+}
+
+// A server that cannot reach the data store (or is still starting) answers 503 with
+// `retryable` BEFORE the request touches anything — nothing was read, written
+// or half-done, so sending it again is always safe. The wait is short and
+// silent: a storage hiccup should cost a heartbeat, not somebody's typed task.
+const RETRY_WAITS = [400, 1200, 2500]
+async function request(path, { method = 'GET', body } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`/api${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    // A 2xx whose body does not parse is a FAILED request, not an empty
+    // answer. Reading it as {} was quietly catastrophic: a body cut short in
+    // transit became "here is your data", and a caller that expected a list
+    // stored an object, rendered `.map` on it, and took the whole app down —
+    // permanently, once that object reached the browser's cache. A short body
+    // deserves the same treatment as any other blip: try again, then say so.
+    const text = await res.text()
+    let data = {}
+    let readable = true
+    if (text) { try { data = JSON.parse(text) } catch { readable = false } }
+    // Anything reaching the server takes down the stale-data warning. Doing it
+    // here rather than in each page's load means nothing has to remember to,
+    // and a board that is talking to the server again stops saying it is not.
+    if (res.ok && readable) { dataIsFresh(); return data }
+    if (res.ok) {
+      if (attempt < RETRY_WAITS.length) {
+        await new Promise((r) => setTimeout(r, RETRY_WAITS[attempt]))
+        continue
+      }
+      throw Object.assign(new Error('The answer arrived incomplete — try again'), { status: res.status })
+    }
+    if (res.status === 503 && data.retryable && attempt < RETRY_WAITS.length) {
+      await new Promise((r) => setTimeout(r, RETRY_WAITS[attempt]))
+      continue
+    }
+    if (res.status === 401) setToken(null)
+    // 413 does not come from the app at all — it comes from the server in
+    // front of it, which refuses an over-sized body before the app is reached.
+    // Its answer is an HTML page, so `data.error` is empty and this used to
+    // surface as "Request failed (413)": a number, about a photo, with nothing
+    // to do about it. Say what it is and what to do instead.
+    const err = new Error(
+      data.error
+      || (res.status === 413
+        ? 'Too big to send. The server in front of the app refuses anything over about 1 MB — try fewer or smaller pictures, or ask an admin to raise nginx\u2019s client_max_body_size to 10m.'
+        : `Request failed (${res.status})`))
+    err.status = res.status
+    err.data = data // extra payload (e.g. scheduling conflicts) for smarter UIs
+    throw err
+  }
+}
+
+// The bytes of something behind the sign-in — a screenshot pasted into a
+// pravka — for drawing or saving. An <img src> cannot carry the token, so the
+// picture is fetched here and handed over as a Blob.
+async function blob(path) {
+  const res = await fetch(`/api${path}`, {
+    headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+  })
+  if (res.status === 401) setToken(null)
+  if (!res.ok) throw Object.assign(new Error(`Request failed (${res.status})`), { status: res.status })
+  return res.blob()
+}
+
+// Short-lived GET memo with in-flight de-duplication: reference lists like the
+// team roster or campaign names are fetched by every modal that opens — one
+// network trip serves them all for a little while. Writes to the same path
+// (post/patch/del) drop the memo so nothing stale survives an edit.
+const memo = new Map() // path -> { at, promise }
+const MEMO_TTL = 30000
+function cachedGet(path) {
+  const hit = memo.get(path)
+  if (hit && Date.now() - hit.at < MEMO_TTL) return hit.promise
+  const promise = request(path).catch((e) => { memo.delete(path); throw e })
+  memo.set(path, { at: Date.now(), promise })
+  return promise
+}
+const dropMemo = (path) => {
+  const base = path.split('?')[0].split('/').slice(0, 2).join('/')
+  for (const k of memo.keys()) if (k.startsWith(base)) memo.delete(k)
+}
+
+// ---- recent-write memory: polls must never erase what you just did ----
+// A poll that left before a write and lands after it carries the old row. Every successful POST/PATCH/DELETE is noted
+// here; when a poll body arrives, rows written in the last grace period win
+// over the (possibly stale) body — so a task you just added can't vanish.
+const RECENT_GRACE = 45000
+const recentWrites = new Map() // `${base}:${id}` → { at, row|null }
+const baseOf = (p) => '/' + p.split('?')[0].split('/').filter(Boolean)[0]
+// Sub-resource writes that answer with the PARENT row (content.js hands back
+// listRow for each of these), so their answer really can stand in for it.
+const SELF_ANSWERING = new Set(['duplicate', 'revisions', 'confirm', 'undo', 'approve', 'color'])
+const noteWrite = (p, row) => {
+  if (!row || typeof row !== 'object' || row.id == null || Array.isArray(row)) return
+  // Only a write that answers with the resource ITSELF may be remembered as
+  // it. POST /content/5/comments answers with a comment — an object with an
+  // id and no channels, no status, no title. Remembered under /content, it
+  // was spliced into the next poll's list as if it were a task, and the first
+  // page to touch `.channels` on it (Overview, Admin → Content) went blank
+  // until reload, for 45 seconds after every comment. Flags, date requests
+  // and file uploads did the same. Depth is the tell: /content and
+  // /content/5 are the thing; /content/5/anything is about the thing.
+  const parts = p.split('?')[0].split('/').filter(Boolean)
+  if (parts.length > 2 && !SELF_ANSWERING.has(parts[2])) return
+  recentWrites.set(`${baseOf(p)}:${row.id}`, { at: Date.now(), row })
+}
+const noteDelete = (p) => {
+  const parts = p.split('?')[0].split('/').filter(Boolean)
+  const id = Number(parts[1])
+  if (parts.length === 2 && Number.isFinite(id))
+    recentWrites.set(`/${parts[0]}:${id}`, { at: Date.now(), row: null })
+}
+function mergeRecent(path, fresh) {
+  if (!Array.isArray(fresh)) return fresh
+  const base = baseOf(path)
+  // A list asked for ONE channel takes back only a row that is on that
+  // channel. Without this a task just saved on another board was spliced into
+  // this one, and a task just moved OFF this channel was put straight back.
+  const dept = new URLSearchParams(path.split('?')[1] || '').get('department')
+  const fits = (row) => !dept || !Array.isArray(row.channels) || row.channels.includes(dept)
+  let out = fresh
+  for (const [key, v] of recentWrites) {
+    if (Date.now() - v.at > RECENT_GRACE) { recentWrites.delete(key); continue }
+    const cut = key.lastIndexOf(':')
+    if (key.slice(0, cut) !== base) continue
+    const id = Number(key.slice(cut + 1))
+    if (v.row === null || !fits(v.row)) out = out.filter((x) => x.id !== id) // we deleted it, or it is not on this list
+    else if (!out.some((x) => x.id === id)) out = [v.row, ...out] // stale body lost it
+    else out = out.map((x) => (x.id === id ? v.row : x)) // ours is newer
+  }
+  return out
+}
+
+// Conditional GET for the live-sync polls: remembers the ETag per path and
+// asks the server "only if it changed". Unchanged data comes back as a tiny
+// 304 with no body — poll() then returns null so callers skip re-rendering.
+const etags = new Map()
+async function conditionalGet(path) {
+  const etag = etags.get(path)
+  const res = await fetch(`/api${path}`, {
+    cache: 'no-store',
+    headers: {
+      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      // cache:'no-store' makes the browser add "Cache-Control: no-cache", and
+      // Express answers that with the full body however fresh the ETag is.
+      // Naming our own Cache-Control stops the browser adding its one.
+      ...(etag ? { 'If-None-Match': etag, 'Cache-Control': 'max-age=0' } : {}),
+    },
+  })
+  if (res.status === 304) return null
+  if (!res.ok) throw new Error(`Request failed (${res.status})`)
+  const next = res.headers.get('ETag')
+  // A body that will not parse must not be remembered as this ETag's answer —
+  // otherwise the next poll gets a 304 and the page keeps the broken shape.
+  let body
+  try { body = JSON.parse(await res.text()) } catch { throw new Error('The answer arrived incomplete') }
+  if (next) etags.set(path, next)
+  return body
+}
+async function poll(path) {
+  const fresh = await conditionalGet(path)
+  return fresh === null ? null : mergeRecent(path, fresh)
+}
+// ETag'd poll for derived views and single objects (a revision feed, one
+// campaign): the recent-write merge is for plain row lists and would splice
+// foreign rows into these shapes — so it is skipped on purpose.
+const pollView = conditionalGet
+
+export const api = {
+  get: (p) => request(p),
+  cached: cachedGet,
+  post: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'POST', body }); noteWrite(p, r); return r },
+  patch: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'PATCH', body }); noteWrite(p, r); return r },
+  // A whole-record replace. Not folded into the recent-write merge: what PUT
+  // is used for here (a rate card) is not a row in any list the client polls,
+  // and splicing it into one would be wrong.
+  put: async (p, body) => { dropMemo(p); return request(p, { method: 'PUT', body }) },
+  // A body on a DELETE is unusual but right where the removal itself needs
+  // saying — a sprint task is dropped WITH a reason, and asking for the reason
+  // in a second request would leave the two apart if the second one failed.
+  del: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'DELETE', body }); noteDelete(p); return r },
+  poll,
+  pollView,
+  blob,
+}

@@ -1,0 +1,374 @@
+// Who is missing the deadlines — shooters, editors or review.
+//
+// The pipeline is read as three accountable phases, each with an owner, a
+// promised date and a moment the work actually left their hands:
+//
+//   shoot   operator_id  recording_date       done when the card enters Editing
+//   edit    editor_id    edit_ready_date      done when the card enters Ready
+//   review  reviewer_id  release_date         done when the card is published
+//
+// Nothing here is stored. A warning is DERIVED from those timestamps every
+// time it is asked for, which is what keeps it honest: when a late handover
+// excuses the next person, their warning disappears by itself instead of
+// waiting for a cleanup job to agree.
+import { dayISO, tashkentDay } from './db.js'
+
+export const PHASES = ['shoot', 'edit', 'review']
+
+// What each phase reads off a task. `started` is the moment the work reached
+// this owner — the shoot has none because it starts with the task itself.
+const FIELDS = {
+  shoot: {
+    owner: 'operator_id', promised: 'recording_date', revised: null,
+    started: null, delivered: 'shot_at', role: 'operator',
+  },
+  edit: {
+    owner: 'editor_id', promised: 'edit_ready_date', revised: 'edit_due_revised',
+    started: 'shot_at', delivered: 'edited_at', role: 'editor',
+  },
+  review: {
+    // Review can be shared. `reviewers` is the list; reviewer_id mirrors the
+    // first of them, and a missed review is charged to every name on it.
+    owner: 'reviewer_id', owners: 'reviewers', promised: 'release_date', revised: 'review_due_revised',
+    started: 'edited_at', delivered: 'done_at', role: 'reviewer',
+  },
+}
+
+// Does a phase have an upstream on THIS task? The shoot never does — it starts
+// with the task itself. The edit and the review do, but only on filmed work: a
+// written post has no shoot and no cut to wait for, so its release date answers
+// for itself exactly the way a shoot day does. Getting this wrong is how a post
+// published three days late used to count as on time — there was no `edited_at`
+// on it, so the review phase excused itself and the miss vanished.
+const HAS_UPSTREAM = (task, f) => !!f.started && (task.type === 'reel' || task.type === 'video')
+
+// The people answering for a phase. A shared phase answers as a group.
+export function ownersOfPhase(task, key) {
+  const f = FIELDS[key]
+  if (f.owners) {
+    let list = []
+    try { list = JSON.parse(task[f.owners] || '[]') } catch { list = [] }
+    list = list.map(Number).filter(Boolean)
+    if (list.length) return [...new Set(list)]
+  }
+  return task[f.owner] ? [task[f.owner]] : []
+}
+
+export const PHASE_LABEL = { shoot: 'Shooting', edit: 'Editing', review: 'Review & publish' }
+
+// ---- whose miss was it -----------------------------------------------------
+// "It was late" is a fact nobody argues with and nobody can act on. The two
+// answers that change what happens next are PRODUCTION was late (the shoot did
+// not happen, the cut did not come back) and THE MAKER was late (there was
+// nothing to film from, or the finished piece sat unposted).
+//
+// The board can tell these apart most of the time, from what it already holds:
+//
+//   shoot late, and the task carries no script, no ТЗ and no reference
+//        → the maker's. Nobody can film a brief that was never written.
+//   shoot late, briefed              → production's
+//   edit late                        → production's, whether the footage came
+//                                      late or not: an editor handed footage
+//                                      late is excused as an INDIVIDUAL (see
+//                                      phaseState) but the delay is still the
+//                                      production side's
+//   review late                      → the maker's. The piece was finished and
+//                                      handed over; publishing it is their job
+//
+// Where it genuinely cannot tell — a script that arrived late but is sitting
+// there now, an agreement made in a corridor — an admin says so on the task
+// and their answer wins. That is what `miss_blame` is: not a second opinion,
+// the deciding one.
+export const SIDES = {
+  production: { key: 'production', label: 'Production' },
+  make: { key: 'make', label: 'Content' },
+}
+const BRIEFED = (t) => !!(String(t.script || '').trim() || String(t.tz || '').trim()
+  || String(t.reference_text || '').trim() || String(t.reference_links || '[]').length > 4)
+
+// The side a phase's lateness belongs to, and why. `decided` marks an answer a
+// person gave rather than one the board worked out.
+export function blameOfPhase(task, key) {
+  if (task.miss_blame === 'production' || task.miss_blame === 'make') {
+    return { side: task.miss_blame, why: task.miss_blame_note || 'an admin decided this one', decided: true }
+  }
+  if (key === 'review') {
+    return task.done_at
+      ? { side: 'make', why: 'the piece was finished and went out late', decided: false }
+      : { side: 'make', why: 'the release day passed with nothing posted', decided: false }
+  }
+  if (key === 'edit') return { side: 'production', why: 'the edit did not come back in time', decided: false }
+  // the shoot
+  if (!BRIEFED(task)) return { side: 'make', why: 'there was no brief to film from', decided: false }
+  return { side: 'production', why: 'the shoot did not happen on its day', decided: false }
+}
+
+// ---- which stage is which gate ------------------------------------------
+// Stages are the admin's data, not constants, so they are matched by label the
+// way the existing stage rules already do. Each gate answers "entering THIS
+// stage means the phase before it is finished and the next one is owned".
+const GATE_PATTERNS = {
+  shoot:  /to\s*shoot|shooting|s[yj]omka/i,
+  edit:   /editing|montaj/i,
+  review: /^ready$|review|tayyor/i,
+}
+export const isDeleted = (label) => /^deleted$/i.test(String(label || ''))
+
+// Resolve the gate stages once per request from the live stage list. Missing
+// gates simply stay null — an admin who deleted the Editing stage gets no
+// editing gate rather than a crash.
+export function resolveGates(statuses) {
+  const ordered = [...statuses].sort((a, b) => (a.sort - b.sort) || (a.id - b.id))
+  const live = ordered.filter((s) => !isDeleted(s.label))
+  const gates = { shoot: null, edit: null, review: null }
+  for (const key of PHASES) {
+    const hit = live.find((s) => GATE_PATTERNS[key].test(String(s.label || '')))
+    if (hit) gates[key] = { id: hit.id, label: hit.label, index: live.indexOf(hit) }
+  }
+  const final = live.find((s) => s.is_final)
+  return { gates, ordered: live, finalId: final?.id ?? null, deadIds: ordered.filter((s) => isDeleted(s.label)).map((s) => s.id) }
+}
+
+// Every gate a move into `targetId` has to satisfy. Gates are cumulative on
+// purpose: dragging a card straight from Idea to Ready must not be a way to
+// skip naming the shooter and the editor on the way past.
+export function gatesUpTo(targetId, resolved) {
+  const { gates, ordered } = resolved
+  const target = ordered.findIndex((s) => s.id === targetId)
+  if (target < 0) return []
+  return PHASES
+    .map((key) => (gates[key] && gates[key].index <= target ? { key, ...gates[key] } : null))
+    .filter(Boolean)
+}
+
+// Whose hands the task is in RIGHT NOW, judged by the stage it sits in: before
+// the editing gate it belongs to the shooter, from there to review it belongs
+// to the editor, and past that to the reviewers. Handing work over hands over
+// the right to move it — the previous owner cannot drag it back out from under
+// the person now holding it.
+export function holderOf(task, resolved) {
+  const { gates, ordered } = resolved
+  const at = ordered.findIndex((s) => s.id === task.status_id)
+  if (at < 0) return { phase: null, owner_ids: [] }
+  const past = (g) => g && at >= g.index
+  const phase = past(gates.review) ? 'review' : past(gates.edit) ? 'edit' : 'shoot'
+  return { phase, owner_ids: ownersOfPhase(task, phase) }
+}
+
+// ---- has this phase been passed? -------------------------------------------
+// The question that decides whether a piece is late, and the one every part of
+// this board was answering slightly differently — with the result that work
+// visibly finished went on being called late for weeks.
+//
+// A timestamp alone does not answer it. shot_at is stamped when the work is
+// handed to the EDITOR, so a card sitting on Shot — filmed, nothing handed
+// over yet — has none; and rows that predate the stamping have none at all,
+// however long ago the shoot happened. So the STAGE answers as well: a card
+// that has reached Editing has finished its shoot whatever its timestamps say.
+//
+// Either signal is enough. They can only disagree by one being missing.
+const PHASE_DONE_AT = { shoot: 'edit', edit: 'review', design: 'review', review: null }
+// The shoot is the one phase whose end is not a gate. Gates mark handovers —
+// "edit" is the moment footage reaches the editor — but filming is finished
+// the moment the card reaches SHOT, which can sit there for days before
+// anybody hands anything over. Asking the gate instead was why a filmed piece
+// went on being an overdue shoot.
+const SHOT_STAGE = /^shot$|^filmed$/i
+export function phasePassed(task, key, resolved) {
+  const f = FIELDS[key]
+  if (f && task[f.delivered]) return true
+  if (!resolved) return false
+  const at = resolved.ordered.findIndex((s) => s.id === task.status_id)
+  if (at < 0) return false
+  if (key === 'shoot') {
+    const shot = resolved.ordered.findIndex((s) => SHOT_STAGE.test(String(s.label || '')))
+    if (shot >= 0) return at >= shot
+  }
+  const gateKey = PHASE_DONE_AT[key]
+  const gate = gateKey ? resolved.gates[gateKey] : null
+  return !!gate && at >= gate.index
+}
+
+// ---- the state of one phase ---------------------------------------------
+// ok       delivered on or before the promised day
+// late     delivered after it, or still undelivered with the day gone
+// excused  the work only arrived after this phase's own deadline had passed,
+//          and nobody re-promised a date — the delay is upstream, not here
+// waiting  the work has not reached this owner yet
+// pending  in hand, still inside the promised day
+// none     no date was ever promised, so there is nothing to answer for
+const dayDiff = (a, b) => Math.round((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 86400000)
+
+export function phaseState(task, key, today = dayISO(), resolved = null) {
+  const f = FIELDS[key]
+  const promised = task[f.promised] || null
+  const revised = f.revised ? task[f.revised] || null : null
+  const due = revised || promised
+  const started = f.started ? task[f.started] || null : null
+  const deliveredIso = task[f.delivered] || null
+  const delivered = deliveredIso ? tashkentDay(deliveredIso) : null
+
+  const owner_ids = ownersOfPhase(task, key)
+  const blame = blameOfPhase(task, key)
+  const base = {
+    phase: key, label: PHASE_LABEL[key], role: f.role,
+    side: blame.side, blame_why: blame.why, blame_decided: blame.decided,
+    owner_id: owner_ids[0] || null,
+    owner_ids,
+    promised, revised, due,
+    started, started_day: started ? tashkentDay(started) : null,
+    delivered: deliveredIso, delivered_day: delivered,
+    days_late: 0,
+  }
+
+  if (!due) return { ...base, state: 'none' }
+  // Nothing reached this owner. Work still in flight cannot be charged to them
+  // — but a piece that went out anyway crossed the line on a day everybody can
+  // read, so it is judged on that day like any other.
+  //
+  // "Reached" is asked of the stamp OR the stage — this phase's own GATE, the
+  // stage whose entry means "the phase before it is finished and the next one
+  // is owned" (resolveGates). A card standing in Editing with no shot_at —
+  // created there, or older than the stamps — is in the editor's hands, not
+  // on its way to them. The gate, and not "is the shoot finished": on a board
+  // with a Shot stage a card sits there filmed, with nothing handed over yet.
+  const gate = resolved?.gates?.[key] || null
+  const arrived = !!started
+    || (!!gate && resolved.ordered.findIndex((st) => st.id === task.status_id) >= gate.index)
+  if (HAS_UPSTREAM(task, f) && !arrived && !delivered) return { ...base, state: 'waiting' }
+
+  let state
+  if (delivered) state = delivered <= due ? 'ok' : 'late'
+  // No timestamp, but the card has moved past this phase — the work happened,
+  // it simply happened before anything wrote it down. Calling that late is how
+  // finished pieces stayed on people's overdue lists for weeks.
+  else if (phasePassed(task, key, resolved)) state = 'ok'
+  else state = today > due ? 'late' : 'pending'
+
+  // The upstream excuse: the work landed here after this phase's own date had
+  // already gone, and no replacement date was agreed. Only a phase with an
+  // upstream can be excused — the shoot answers for itself.
+  if (state === 'late' && HAS_UPSTREAM(task, f) && started && !revised && tashkentDay(started) > due)
+    state = 'excused'
+
+  // Excused work still ran late — the person is not charged for it, but the
+  // calendar does not care whose fault it was, and the report needs the days
+  // to attribute them to whoever handed over late.
+  const days_late = state === 'late' || state === 'excused' ? Math.max(0, dayDiff(delivered || today, due)) : 0
+  return { ...base, state, days_late }
+}
+
+// ---- where a repost goes out ------------------------------------------------
+// The last gate of a piece going to TikTok or YouTube Shorts alone — a repost
+// (server/reposts.js) always is. Publishing already asks every piece for the
+// link to the post; here the link must also be ON that platform, because a
+// repost "published" with the Instagram address it was copied from is a
+// TikTok post nobody can find, counted as done. Keyed by the channel key,
+// which never changes after a channel is made. A piece on several channels
+// has one link for all of them and is not asked this. → the refusal, or null.
+const POST_HOSTS = {
+  tiktok: { re: /(^|\.)tiktok\.com$/i, name: 'TikTok' },
+  youtube_shorts: { re: /(^|\.)(youtube\.com|youtu\.be)$/i, name: 'YouTube' },
+}
+export function postLinkProblem(channels, link) {
+  const list = Array.isArray(channels) ? channels : []
+  const want = list.length === 1 ? POST_HOSTS[list[0]] : null
+  if (!want) return null
+  let host = ''
+  try { host = new URL(String(link || '').trim()).hostname } catch { host = '' }
+  return want.re.test(host) ? null
+    : `Paste the ${want.name} link — this one goes out on ${want.name}, and that address is where the team finds it`
+}
+
+// All three phases of one task.
+export function phasesOf(task, today = dayISO(), resolved = null) {
+  return PHASES.map((k) => phaseState(task, k, today, resolved))
+}
+
+// The warnings a task produces: late phases that have somebody to answer for.
+// A shared phase produces one warning per owner — a review two people agreed
+// to own is late for both of them. A late phase nobody owns is still returned
+// (owner_id null) so admins can see unowned slippage, but it never lands in a
+// person's account.
+export function warningsOf(task, today = dayISO(), resolved = null) {
+  return phasesOf(task, today, resolved)
+    .filter((p) => p.state === 'late')
+    .flatMap((p) => {
+      const owners = p.owner_ids.length ? p.owner_ids : [null]
+      return owners.map((owner_id) => ({
+        content_id: task.id,
+        title: task.title,
+        channels: task.channels,
+        type: task.type,
+        phase: p.phase,
+        phase_label: p.label,
+        role: p.role,
+        owner_id,
+        // Named so a shared miss reads as shared rather than personal.
+        shared_with: owners.filter((id) => id && id !== owner_id),
+        due: p.due,
+        promised: p.promised,
+        revised: p.revised,
+        delivered: p.delivered,
+        delivered_day: p.delivered_day,
+        days_late: p.days_late,
+        // An undelivered late phase is still running — it gets worse each day.
+        open: !p.delivered,
+      }))
+    })
+}
+
+// ---- the handover stamps a move is allowed to write -----------------------
+//
+// Crossing a gate stops the previous stage's clock: arriving in Editing stamps
+// shot_at (the footage reached the editor), arriving at the review stage
+// stamps edited_at (the cut reached review). That crossing is the ONLY moment
+// either may be written. A move that starts already past the gate is not a
+// handover, and stamping it "now" dates somebody's finished work with the
+// moment somebody ELSE next touched the card.
+//
+// That is what happened. A card created straight into Editing, or caught up
+// across several stages in one drag, carried no shoot stamp — and the next
+// move wrote one: the editor handing the cut on, the planner publishing. The
+// operator was then charged with a shoot "delivered" on the day the EDIT was
+// finished, eight, twenty, forty days after it happened. phaseState already
+// reads a passed phase with no stamp as on time (see above); the invented
+// stamp overrode it.
+export const STAMP_GATES = [['edit', 'shot_at'], ['review', 'edited_at']]
+
+// Which existing stamps were written by a move that did not cross their gate.
+//
+// Pure — rows, the stage moves from the paper trail and the statuses in, a
+// list of { id, field, was } out — so the one-time repair and the suite that
+// guards it share a single definition. A stamp and the move that wrote it are
+// written in one request, milliseconds apart, so each stamp is matched to the
+// stage move logged closest to it; that move's FROM stage says whether it
+// crossed. A stage no longer on the board — the folded «Shot», «Deleted» —
+// cannot be placed, so those are left alone: only the stamps that are
+// provably invented are named.
+export function backfilledStamps(rows, stageMoves, statuses, windowMs = 2000) {
+  const resolved = resolveGates(statuses)
+  const norm = (s) => String(s || '').trim().toLowerCase()
+  const indexOf = (label) => resolved.ordered.findIndex((s) => norm(s.label) === norm(label))
+  const movesOf = new Map()
+  for (const m of stageMoves) {
+    if (!movesOf.has(m.content_id)) movesOf.set(m.content_id, [])
+    movesOf.get(m.content_id).push(m)
+  }
+  const out = []
+  for (const row of rows) {
+    for (const [gateKey, field] of STAMP_GATES) {
+      const gate = resolved.gates[gateKey]
+      const stamp = row[field]
+      if (!gate || !stamp) continue
+      const at = Date.parse(stamp)
+      let best = null
+      for (const m of movesOf.get(row.id) || []) {
+        const d = Math.abs(Date.parse(m.created_at) - at)
+        if (d <= windowMs && (!best || d < best.d)) best = { d, from: m.old_value }
+      }
+      if (best && indexOf(best.from) >= gate.index) out.push({ id: row.id, field, was: stamp })
+    }
+  }
+  return out
+}

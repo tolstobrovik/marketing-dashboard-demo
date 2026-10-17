@@ -1,0 +1,55 @@
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App.jsx'
+import { AuthProvider } from './lib/auth.jsx'
+import { ChannelsProvider } from './lib/channels.jsx'
+import { PagesProvider } from './lib/pages.jsx'
+import { ContextMenuProvider } from './components/ContextMenu.jsx'
+import { I18nProvider } from './lib/i18n.jsx'
+import Toasts from './components/Toasts.jsx'
+import UploadsDock from './components/UploadsDock.jsx'
+import HeatmapOverlay from './components/HeatmapOverlay.jsx'
+import { applyTextSize } from './lib/textSize.js'
+import { applyTheme } from './lib/theme.js'
+import './styles.css'
+import HoverPreview from './components/HoverPreview.jsx'
+import Boom from './components/Boom.jsx'
+
+applyTextSize() // the remembered Small / Medium / Large, before first paint
+applyTheme()    // the remembered Light / Dark / System — no white flash at night
+
+// Pages load on demand, so a tab that outlived a deploy can ask for a chunk
+// that no longer exists. Vite reports that as vite:preloadError — one reload
+// fetches the current build (guarded so a truly broken network can't loop).
+window.addEventListener('vite:preloadError', (e) => {
+  const last = Number(sessionStorage.getItem('satashkent_chunk_reload') || 0)
+  if (Date.now() - last < 30000) return // still failing after a reload — don't loop
+  sessionStorage.setItem('satashkent_chunk_reload', String(Date.now()))
+  e.preventDefault()
+  location.reload()
+})
+
+createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <Boom>
+      <I18nProvider>
+        <AuthProvider>
+          <ChannelsProvider>
+            <PagesProvider>
+            <ContextMenuProvider>
+              <App />
+              <Toasts />
+              <UploadsDock />
+              <HeatmapOverlay />
+              <HoverPreview />
+            </ContextMenuProvider>
+            </PagesProvider>
+          </ChannelsProvider>
+        </AuthProvider>
+      </I18nProvider>
+      </Boom>
+    </BrowserRouter>
+  </React.StrictMode>,
+)

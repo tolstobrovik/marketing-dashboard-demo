@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SATashkent Screen Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a Figma-like board. One row per person, every screen at its real
+   size on a pannable, zoomable canvas; a toolbar on top; a viewer on click. */
+@font-face { font-family: 'Nekst'; src: url('../client/public/fonts/Nekst-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap }
+:root {
+  /* SATashkent brand book v1 */
+  --ruby: #A22036;
+  --ruby-soft: color-mix(in srgb, #A22036 12%, transparent);
+  --ink: #262626;
+  --ink-2: color-mix(in srgb, #262626 62%, #ffffff);
+  --rule: #B6B6B7;
+  --canvas: #E9E9E9;
+  --bar: #ffffff;
+  --frame-shadow: 0 1px 2px rgb(38 38 38 / .10), 0 8px 24px rgb(38 38 38 / .08);
+  --on-ruby: #E9E9E9;
+  --scrim: rgb(38 38 38 / .82);
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --display: 'Nekst', 'Inter', system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ruby: #CB3351; --ruby-soft: color-mix(in srgb, #CB3351 22%, transparent);
+    --ink: #E9E9E9; --ink-2: color-mix(in srgb, #E9E9E9 64%, #1c1c1c); --rule: #4a4a4b;
+    --canvas: #1c1c1c; --bar: #262626; --frame-shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35);
+    --on-ruby: #E9E9E9; --scrim: rgb(10 10 10 / .88); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ruby: #CB3351; --ruby-soft: color-mix(in srgb, #CB3351 22%, transparent);
+  --ink: #E9E9E9; --ink-2: color-mix(in srgb, #E9E9E9 64%, #1c1c1c); --rule: #4a4a4b;
+  --canvas: #1c1c1c; --bar: #262626; --frame-shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px rgb(0 0 0 / .35);
+  --on-ruby: #E9E9E9; --scrim: rgb(10 10 10 / .88); color-scheme: dark;
+}
+html, body { height: 100%; margin: 0 }
+body { background: var(--canvas); color: var(--ink); font: 14px/1.4 var(--font); overflow: hidden; display: flex; flex-direction: column }
+button { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--ruby); outline-offset: 2px }
+
+.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--bar); border-bottom: 1px solid var(--rule); position: relative; z-index: 2;
+}
+.bar h1 { font: 600 18px/1.1 var(--display); margin: 0; letter-spacing: -.01em; white-space: nowrap }
+.bar .meta { color: var(--ink-2); font-size: 12px; white-space: nowrap }
+.people { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0 }
+.chip { border: 1px solid var(--rule); background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 500; cursor: pointer }
+.chip[aria-pressed="true"] { background: var(--ruby); border-color: var(--ruby); color: var(--on-ruby) }
+.zoom { margin-left: auto; display: flex; align-items: center; gap: 4px }
+.zoom button { border: 1px solid var(--rule); background: transparent; border-radius: 8px; min-width: 32px; height: 30px; padding: 0 8px; cursor: pointer; font-weight: 500 }
+.zoom output { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-2) }
+
+.stage { flex: 1; position: relative; overflow: hidden; cursor: grab; touch-action: none }
+.stage.drag { cursor: grabbing }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform }
+.row-label { position: absolute; font: 600 560px/1 var(--display); letter-spacing: -.02em; white-space: nowrap }
+.row-label small { display: block; font: 500 190px/1.25 var(--font); color: var(--ink-2); margin-top: 70px; letter-spacing: 0 }
+.row-label small b { color: var(--ruby); font-weight: 600 }
+.frame { position: absolute; cursor: zoom-in }
+.frame .t { position: absolute; left: 0; bottom: 100%; padding-bottom: 14px; font: 500 26px/1.2 var(--font); white-space: nowrap; color: var(--ink-2) }
+.frame .t b { color: var(--ink); font-weight: 600 }
+.frame img { display: block; width: 100%; height: 100%; background: #ffffff; box-shadow: var(--frame-shadow); border-radius: 4px; max-width: none }
+.frame.phone img { border-radius: 28px }
+.frame:hover img { outline: 6px solid var(--ruby); outline-offset: 4px }
+.frame .cut { position: absolute; left: 0; right: 0; bottom: -40px; text-align: center; font: 500 22px var(--font); color: var(--ink-2) }
+
+.hint {
+  position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--bar); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 12px; font-size: 12px; color: var(--ink-2); max-width: min(560px, calc(100% - 32px));
+}
+.hint kbd { font: 600 11px var(--font); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; color: var(--ink) }
+
+.viewer { position: fixed; inset: 0; background: var(--scrim); z-index: 10; display: grid; grid-template-rows: auto 1fr; }
+.viewer[hidden] { display: none }
+.viewer header {
+  display: flex; align-items: center; gap: 12px; color: #E9E9E9;
+  padding-block: calc(12px + env(safe-area-inset-top, 0px)) 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.viewer header .who { font-size: 12px; opacity: .75 }
+.viewer header .name { font-weight: 600; font-size: 15px; min-width: 0; overflow-wrap: anywhere }
+.viewer header code { font-size: 12px; opacity: .75 }
+.viewer header .sp { flex: 1 }
+.viewer header button { background: transparent; border: 1px solid rgb(233 233 233 / .4); color: #E9E9E9; border-radius: 8px; height: 32px; min-width: 36px; cursor: pointer }
+.viewer .scroll { overflow: auto; padding-block: 8px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.viewer img { display: block; margin: 0 auto; max-width: 100%; height: auto; background: #ffffff; border-radius: 6px }
+.viewer img.phone { max-width: min(100%, 430px) }
+
+@media (max-width: 640px) {
+  .bar h1 { font-size: 16px }
+  .bar .meta { display: none }
+  .zoom { margin-left: 0 }
+  .hint { display: none }
+}
+@media (prefers-reduced-motion: no-preference) { .world.glide { transition: transform .35s cubic-bezier(.2,.7,.2,1) } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>SATashkent Screen Map</h1>
+  <span class="meta" id="meta"></span>
+  <div class="people" id="people" role="group" aria-label="Show people"></div>
+  <div class="zoom">
+    <button id="out" aria-label="Zoom out">−</button>
+    <output id="pct">100%</output>
+    <button id="in" aria-label="Zoom in">+</button>
+    <button id="fit">Fit all</button>
+  </div>
+</div>
+<div class="stage" id="stage">
+  <div class="world" id="world"></div>
+  <div class="hint">Drag to move · <kbd>Ctrl</kbd>+wheel or pinch to zoom · double-click a screen to zoom to it · click to open it</div>
+</div>
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-labelledby="v-name">
+  <header>
+    <div style="min-width:0">
+      <div class="who" id="v-who"></div>
+      <div class="name" id="v-name"></div>
+      <code id="v-path"></code>
+    </div>
+    <span class="sp"></span>
+    <button id="v-prev" aria-label="Previous screen">←</button>
+    <button id="v-next" aria-label="Next screen">→</button>
+    <button id="v-close" aria-label="Close">✕</button>
+  </header>
+  <div class="scroll" id="v-scroll"><img id="v-img" alt=""></div>
+</div>
+<script src="screens.js"></script>
+<script>
+(() => {
+  const data = window.OVERVIEW
+  const world = document.getElementById('world'), stage = document.getElementById('stage')
+  if (!data) {
+    world.innerHTML = '<div style="position:absolute;left:40px;top:40px;width:520px;font-size:16px">No screens yet. Start the demo with <b>npm run demo</b>, then run <b>npm run screens</b> in a second terminal.</div>'
+    return
+  }
+  const GAP = 140, ROW_GAP = 900, LINE_GAP = 220, HEAD_H = 1250, LINE_W = 13200
+  const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } }
+  let hidden = new Set(JSON.parse(store.get('map.hidden') || '[]'))
+  const when = new Date(data.taken)
+  document.getElementById('meta').textContent = `${data.shots.length} screens · ${data.lang.toUpperCase()} · taken ${when.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+
+  // ---- people filter
+  const people = document.getElementById('people')
+  for (const r of data.roles) {
+    const b = document.createElement('button')
+    b.className = 'chip'; b.textContent = r.label.split(' — ')[0]; b.title = r.label
+    b.setAttribute('aria-pressed', String(!hidden.has(r.role)))
+    b.onclick = () => {
+      hidden.has(r.role) ? hidden.delete(r.role) : hidden.add(r.role)
+      if (hidden.size === data.roles.length) hidden.delete(r.role)
+      store.set('map.hidden', JSON.stringify([...hidden]))
+      for (const c of people.children) c.setAttribute('aria-pressed', String(!hidden.has(c.dataset.role)))
+      layout(); fit()
+    }
+    b.dataset.role = r.role
+    people.appendChild(b)
+  }
+
+  // ---- the board
+  let visible = [], W = 0, H = 0
+  function layout() {
+    world.innerHTML = ''
+    visible = []
+    let y = 0
+    for (const r of data.roles) {
+      if (hidden.has(r.role)) continue
+      const shots = data.shots.filter((s) => s.role === r.role)
+      const label = document.createElement('div')
+      label.className = 'row-label'
+      const [who, rest] = r.label.split(' — ')
+      label.innerHTML = `${who}<small>${rest ? rest + ' · ' : ''}signs in as <b>${r.user}</b> · ${shots.length} screens</small>`
+      label.style.left = '0px'; label.style.top = `${y}px`
+      world.appendChild(label)
+      y += HEAD_H
+      let x = 0, tallest = 0
+      for (const s of shots) {
+        const w = s.mobile ? 390 : s.w, h = s.mobile ? Math.round(s.h * 390 / s.w) : s.h
+        // A long row wraps, so the whole board keeps a readable shape.
+        if (x > 0 && x + w > LINE_W) { x = 0; y += tallest + LINE_GAP; tallest = 0 }
+        const f = document.createElement('div')
+        f.className = 'frame' + (s.mobile ? ' phone' : '')
+        Object.assign(f.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` })
+        f.innerHTML = `<div class="t"><b></b> · <span></span></div><img decoding="async" alt="">${s.cut ? '<div class="cut">page continues below</div>' : ''}`
+        f.querySelector('b').textContent = s.title
+        f.querySelector('span').textContent = s.path
+        const img = f.querySelector('img'); img.src = `screens/${s.file}`; img.alt = `${r.label}: ${s.title}`
+        const i = visible.length
+        let wait = null
+        f.addEventListener('click', () => { if (!moved) { clearTimeout(wait); wait = setTimeout(() => open(i), 260) } })
+        f.addEventListener('dblclick', (e) => { e.stopPropagation(); clearTimeout(wait); const v = visible[i]; zoomTo(v.x, v.y, v.w, v.h) })
+        world.appendChild(f)
+        visible.push({ s, r, x, y, w, h })
+        x += w + GAP
+        tallest = Math.max(tallest, h)
+      }
+      W = Math.max(W, x)
+      y += tallest + ROW_GAP
+    }
+    H = y
+  }
+
+  // ---- pan and zoom
+  let k = 1, tx = 0, ty = 0, moved = false
+  const pct = document.getElementById('pct')
+  const apply = (glide) => {
+    world.classList.toggle('glide', !!glide)
+    world.style.transform = `translate(${tx}px, ${ty}px) scale(${k})`
+    pct.textContent = `${Math.round(k * 100)}%`
+  }
+  const clampK = (v) => Math.min(2, Math.max(0.02, v))
+  function zoomAt(f, cx, cy, glide) {
+    const nk = clampK(k * f)
+    tx = cx - (cx - tx) * (nk / k); ty = cy - (cy - ty) * (nk / k); k = nk
+    apply(glide)
+  }
+  function zoomTo(x, y, w, h) {
+    const r = stage.getBoundingClientRect(), pad = 48
+    k = clampK(Math.min((r.width - pad * 2) / w, (r.height - pad * 2) / (h + 60)))
+    tx = r.width / 2 - (x + w / 2) * k; ty = pad + 50 * k - y * k
+    apply(true)
+  }
+  function fit() {
+    const r = stage.getBoundingClientRect(), pad = 32
+    k = clampK(Math.min((r.width - pad * 2) / W, (r.height - pad * 2) / H))
+    tx = pad + ((r.width - pad * 2) - W * k) / 2; ty = pad + 40 * k
+    apply(true)
+  }
+  document.getElementById('in').onclick = () => { const r = stage.getBoundingClientRect(); zoomAt(1.4, r.width / 2, r.height / 2, true) }
+  document.getElementById('out').onclick = () => { const r = stage.getBoundingClientRect(); zoomAt(1 / 1.4, r.width / 2, r.height / 2, true) }
+  document.getElementById('fit').onclick = fit
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault()
+    const r = stage.getBoundingClientRect()
+    if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top)
+    else { tx -= e.deltaX; ty -= e.deltaY; apply() }
+  }, { passive: false })
+
+  const pts = new Map(); let last = null, pinch = null, downAt = null
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.hint')) return
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    moved = false; downAt = { x: e.clientX, y: e.clientY }
+    if (pts.size === 1) last = { x: e.clientX, y: e.clientY }
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y) }
+  })
+  addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) { moved = true; stage.classList.add('drag') }
+    if (pts.size === 2 && pinch) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y), r = stage.getBoundingClientRect()
+      zoomAt(d / pinch, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); pinch = d
+    } else if (pts.size === 1 && last) {
+      tx += e.clientX - last.x; ty += e.clientY - last.y; last = { x: e.clientX, y: e.clientY }; apply()
+    }
+  })
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) { last = null; stage.classList.remove('drag') } else last = [...pts.values()][0] }
+  addEventListener('pointerup', up); addEventListener('pointercancel', up)
+
+  // ---- the viewer
+  const viewer = document.getElementById('viewer'), vimg = document.getElementById('v-img')
+  let at = -1
+  function open(i) {
+    at = (i + visible.length) % visible.length
+    const { s, r } = visible[at]
+    vimg.src = `screens/${s.file}`; vimg.alt = `${r.label}: ${s.title}`
+    vimg.className = s.mobile ? 'phone' : ''
+    document.getElementById('v-who').textContent = `${r.label} · ${at + 1} of ${visible.length}`
+    document.getElementById('v-name').textContent = s.title
+    document.getElementById('v-path').textContent = `localhost:5173${s.path}`
+    document.getElementById('v-scroll').scrollTop = 0
+    viewer.hidden = false
+    document.getElementById('v-close').focus()
+  }
+  const close = () => { viewer.hidden = true; at = -1 }
+  document.getElementById('v-close').onclick = close
+  document.getElementById('v-prev').onclick = () => open(at - 1)
+  document.getElementById('v-next').onclick = () => open(at + 1)
+  viewer.addEventListener('click', (e) => { if (e.target === viewer || e.target.id === 'v-scroll') close() })
+  document.addEventListener('keydown', (e) => {
+    if (!viewer.hidden) {
+      if (e.key === 'Escape') close()
+      if (e.key === 'ArrowLeft') open(at - 1)
+      if (e.key === 'ArrowRight') open(at + 1)
+      return
+    }
+    const r = stage.getBoundingClientRect()
+    if (e.key === '+' || e.key === '=') zoomAt(1.25, r.width / 2, r.height / 2, true)
+    if (e.key === '-') zoomAt(0.8, r.width / 2, r.height / 2, true)
+    if (e.key === '0' || e.key === '1' && e.shiftKey) fit()
+  })
+
+  layout()
+  requestAnimationFrame(fit)
+  addEventListener('resize', () => { if (viewer.hidden) fit() })
+})()
+</script>
+</body>
+</html>

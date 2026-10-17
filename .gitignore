@@ -1,0 +1,35 @@
+node_modules/
+dist/
+# The demo database and the press log — made on each computer by `npm run demo`.
+data/
+*.log
+.env
+.DS_Store
+
+# Scratch data directories the suites create beside themselves when run in
+# place — which is what CI does, and what anyone without the original
+# sandbox does. They are per-run and must never be offered up as changes.
+#
+# Every directory, not a prefix list: the suites use twenty different ones
+# (r54a-, r57-, tg38-, walk-, d52-, x53-, smoke-, f51- …) and `qa/r5*-*/`
+# caught seven of them. qa/ holds only files, so any directory appearing
+# there is scratch by definition — including whatever the next suite invents.
+qa/*/
+
+# The screenshots the suites take to look at what they are testing. Per-run
+# evidence, the same as the scratch directories above — regenerated on every
+# gate and never worth a diff.
+qa/*.png
+# …and the ones a suite drops in the repo root when it is run from there.
+# Same thing, different working directory.
+/*.png
+
+# The deployment's own secrets and pm2 logs — server-side, never committed.
+.env.production
+logs/
+
+# The screenshots the board shows ARE kept: design-overview/screens/*.png
+!design-overview/screens/*.png
+
+# Editor/agent scratch: a local dev launch config, not the project.
+.claude/

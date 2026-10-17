@@ -1,0 +1,183 @@
+import { Router } from 'express'
+import { all, get, run, batch, taskChildDeletes, CHANNEL_FORMAT_KEYS } from '../db.js'
+import { authRequired, adminOnly, can, wrap, isAdminOn } from '../auth.js'
+
+const router = Router()
+router.use(authRequired)
+
+const slugify = (s) =>
+  String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'channel'
+
+// Sections a channel dashboard can show, in any order. The client renders
+// exactly this set — keep the two lists in step.
+export const DASH_WIDGETS = ['programs', 'campaigns', 'timetable', 'upcoming', 'done', 'content']
+
+// The head of each department rides along (live name/avatar for the UI).
+router.get('/', wrap(async (req, res) => {
+  res.json(await all(`
+    SELECT c.*, u.name AS head_name, u.color AS head_color, u.avatar AS head_avatar
+    FROM channels c LEFT JOIN users u ON u.id = c.head_id
+    ORDER BY c.sort, c.id
+  `))
+}))
+
+const cleanHead = async (v) => {
+  if (v == null || v === '') return null
+  const id = Number(v)
+  if (!(await get('SELECT 1 AS x FROM users WHERE id = ?', id))) throw Object.assign(new Error('Head not found'), { status: 400 })
+  return id
+}
+
+// What kind of surface this is — see CHANNEL_FORMATS. Anything unrecognised
+// falls back to a social feed, which is how every channel behaved before
+// formats existed, so a bad value can only ever mean "as before".
+const cleanFormat = (v, fallback = 'social') =>
+  (typeof v === 'string' && CHANNEL_FORMAT_KEYS.includes(v)) ? v : fallback
+
+router.post('/', adminOnly, wrap(async (req, res) => {
+  const { label, head_id = null } = req.body || {}
+  // An icon is a name from the set; anything else (an object reached the
+  // driver and came back a 500) is the default.
+  const icon = typeof req.body?.icon === 'string' ? req.body.icon : 'star'
+  if (!label || !String(label).trim()) return res.status(400).json({ error: 'Name is required' })
+  let head
+  try { head = await cleanHead(head_id) } catch (e) { return res.status(400).json({ error: e.message }) }
+  // A channel made without a head is not an ownerless channel — it is one
+  // whose owner has not been typed in yet. It used to be born wearing a red
+  // NO OWNER badge, which then sat on the board until somebody noticed it,
+  // and everybody who could not fix it got to look at the alarm meanwhile.
+  // Whoever made it owns it until they say otherwise; that is true, it is one
+  // less form to fill in, and the badge means something when it does appear.
+  if (head == null) head = req.user.id
+  let key = slugify(label)
+  let n = 1
+  while (await get('SELECT 1 AS x FROM channels WHERE key = ?', key)) key = `${slugify(label)}_${++n}`
+  const maxSort = (await get('SELECT COALESCE(MAX(sort), -1) AS m FROM channels')).m
+  const info = await run('INSERT INTO channels (key, label, icon, head_id, sort, format, video) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    key, String(label).trim(), icon, head, maxSort + 1, cleanFormat(req.body?.format), req.body?.video === true ? 1 : 0)
+  res.status(201).json(await get('SELECT * FROM channels WHERE id = ?', info.lastInsertRowid))
+}))
+
+router.patch('/:id', adminOnly, wrap(async (req, res) => {
+  const row = await get('SELECT * FROM channels WHERE id = ?', req.params.id)
+  if (!row) return res.status(404).json({ error: 'Channel not found' })
+  const { label, icon, head_id, drive_url, daily_ad_cap, format, char_limit, video } = req.body || {}
+  // A channel with no name is not one to pick from (POST refuses it too).
+  if (label !== undefined && !String(label).trim()) return res.status(400).json({ error: 'Name is required' })
+  let head = row.head_id
+  if (head_id !== undefined) {
+    try { head = await cleanHead(head_id) } catch (e) { return res.status(400).json({ error: e.message }) }
+  }
+  // The channel's shared Drive folder. Cleared with an empty string; anything
+  // else has to be a real address, because every delivery on this channel is
+  // about to be built on top of it.
+  let drive = row.drive_url || ''
+  if (drive_url !== undefined) {
+    const next = String(drive_url || '').trim()
+    if (next && !/^https?:\/\//i.test(next))
+      return res.status(400).json({ error: 'The folder is a link — paste the full https://… address of the Drive folder' })
+    drive = next
+  }
+  // How many video ads this channel may run on one day. Ads are bought a
+  // month at a time and burn their audience if they land in a heap, so the
+  // ceiling belongs to the channel. 0 = none, which is what it was before.
+  let adCap = row.daily_ad_cap || 0
+  if (daily_ad_cap !== undefined) {
+    const n = Math.round(Number(daily_ad_cap))
+    if (!Number.isFinite(n) || n < 0 || n > 50) {
+      return res.status(400).json({ error: 'Ads a day is a whole number from 0 to 50 — 0 means no limit' })
+    }
+    adCap = n
+  }
+  // The longest post this channel takes (X 280, Threads 500…). Empty or 0
+  // clears it: no limit, as every channel was before this existed.
+  let limit = row.char_limit ?? null
+  if (char_limit !== undefined) {
+    const n = char_limit === null || char_limit === '' ? 0 : Math.round(Number(char_limit))
+    if (!Number.isFinite(n) || n < 0 || n > 100000)
+      return res.status(400).json({ error: 'The post length limit is a whole number of characters — empty means no limit' })
+    limit = n || null
+  }
+  // Its videos go on to TikTok and Shorts (server/reposts.js): one switch.
+  const vid = video !== undefined ? (video === true || video === 1 || video === '1' ? 1 : 0) : (row.video ? 1 : 0)
+  await run('UPDATE channels SET label = ?, icon = ?, head_id = ?, drive_url = ?, daily_ad_cap = ?, format = ?, char_limit = ?, video = ? WHERE id = ?',
+    label !== undefined ? String(label).trim() : row.label, typeof icon === 'string' ? icon : row.icon, head, drive, adCap,
+    format !== undefined ? cleanFormat(format, row.format || 'social') : (row.format || 'social'), limit, vid, row.id)
+  res.json(await get('SELECT * FROM channels WHERE id = ?', row.id))
+}))
+
+// Which sections this channel's page shows, and in what order. The admin can
+// shape any channel; a member with the layout right can shape their own.
+router.patch('/:id/dashboard', wrap(async (req, res) => {
+  const row = await get('SELECT * FROM channels WHERE id = ?', req.params.id)
+  if (!row) return res.status(404).json({ error: 'Channel not found' })
+  // An admin ON this channel — a channel admin elsewhere is not one here.
+  const allowed = isAdminOn(req.user, [row.key]) ||
+    (can(req.user, 'manage_layout') && (req.user.departments || []).includes(row.key))
+  if (!allowed) return res.status(403).json({ error: 'You can’t customize this channel’s dashboard' })
+  const list = req.body?.dashboard
+  if (!Array.isArray(list)) return res.status(400).json({ error: 'dashboard must be an array of section keys' })
+  const clean = [...new Set(list.map(String))].filter((k) => DASH_WIDGETS.includes(k))
+  if (clean.length === 0) return res.status(400).json({ error: 'Keep at least one section on the dashboard' })
+  await run('UPDATE channels SET dashboard = ? WHERE id = ?', JSON.stringify(clean), row.id)
+  res.json(await get('SELECT * FROM channels WHERE id = ?', row.id))
+}))
+
+router.post('/reorder', adminOnly, wrap(async (req, res) => {
+  const { ids } = req.body || {}
+  // Ids, and nothing else — an object in the list reached the driver as a 500.
+  if (!Array.isArray(ids) || !ids.every((id) => Number.isInteger(Number(id))))
+    return res.status(400).json({ error: 'ids array required' })
+  await batch(ids.map((id, i) => ['UPDATE channels SET sort = ? WHERE id = ?', i, Number(id)]))
+  res.json({ ok: true })
+}))
+
+// Deleting a channel removes its metrics, history and content, and revokes it
+// from members' access lists — all in one transaction. Tasks that also live on
+// other channels just lose this one; sole-channel tasks are deleted.
+router.delete('/:id', adminOnly, wrap(async (req, res) => {
+  const row = await get('SELECT * FROM channels WHERE id = ?', req.params.id)
+  if (!row) return res.status(404).json({ error: 'Channel not found' })
+  const stmts = [
+    ['DELETE FROM metric_history WHERE tracker_id IN (SELECT id FROM trackers WHERE department = ?)', row.key],
+    ['DELETE FROM trackers WHERE department = ?', row.key],
+    ['DELETE FROM programs WHERE channel = ?', row.key],
+  ]
+  for (const c of await all('SELECT id, channels FROM content')) {
+    const chs = JSON.parse(c.channels || '[]')
+    if (!chs.includes(row.key)) continue
+    const left = chs.filter((k) => k !== row.key)
+    if (left.length) {
+      stmts.push(['UPDATE content SET channels = ? WHERE id = ?', JSON.stringify(left), c.id])
+    } else {
+      // The task had nowhere else to live, so it goes — and everything it was
+      // carrying goes with it, the same way a task deleted by hand does.
+      stmts.push(...taskChildDeletes(c.id))
+      stmts.push(['DELETE FROM content WHERE id = ?', c.id])
+    }
+  }
+  for (const u of await all('SELECT id, name, departments, admin_channels FROM users')) {
+    const depts = JSON.parse(u.departments || '[]')
+    if (depts.includes(row.key)) {
+      stmts.push(['UPDATE users SET departments = ? WHERE id = ?', JSON.stringify(depts.filter((d) => d !== row.key)), u.id])
+    }
+    // An admin's scope reads EMPTY as "the whole board" (auth.js). So the key
+    // can neither be left behind — users.js drops channels that no longer
+    // exist the next time the account is saved, which empties the list — nor
+    // be taken from somebody whose only channel this is. Nothing has been
+    // written yet, so refusing here leaves the channel exactly as it was.
+    const runs = JSON.parse(u.admin_channels || '[]')
+    if (runs.includes(row.key)) {
+      const left = runs.filter((d) => d !== row.key)
+      if (!left.length) {
+        return res.status(409).json({ error: `${u.name} is an admin of this channel only — give them another channel or change their role first. Deleting it now would leave them an admin of the whole board.` })
+      }
+      stmts.push(['UPDATE users SET admin_channels = ? WHERE id = ?', JSON.stringify(left), u.id])
+    }
+  }
+  stmts.push(['DELETE FROM channels WHERE id = ?', row.id])
+  await batch(stmts)
+  res.json({ ok: true })
+}))
+
+export default router

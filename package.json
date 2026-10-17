@@ -1,0 +1,38 @@
+{
+  "name": "satashkent-dashboard-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo copy of the SATashkent marketing dashboard — made-up data, runs only on this computer",
+  "scripts": {
+    "demo": "node scripts/demo.mjs",
+    "demo:reset": "node scripts/demo.mjs --reset",
+    "screens": "node design-overview/capture.mjs",
+    "dev": "concurrently -k -n api,web -c magenta,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node --watch server/index.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "seed": "node server/seed.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "lucide-react": "^0.469.0",
+    "mammoth": "^1.12.2",
+    "playwright-core": "^1.48.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.1",
+    "recharts": "^2.15.4",
+    "vite": "^5.4.11"
+  }
+}
