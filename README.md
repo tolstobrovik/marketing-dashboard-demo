@@ -27,7 +27,7 @@ You need [Node.js](https://nodejs.org) 20 or newer (the LTS download is fine)
 and Git.
 
 ```bash
-git clone https://github.com/satashkent/marketing-dashboard-demo.git
+git clone https://github.com/tolstobrovik/marketing-dashboard-demo.git
 cd marketing-dashboard-demo
 npm install
 npm run demo
