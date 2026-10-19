@@ -35,7 +35,7 @@ const PEOPLE = [
 
 // The admin's pages that are not all in the menu at once, and the panel's tabs.
 const ADMIN_EXTRA = [
-  ['/overview', 'Overview (old home, in no menu)'], ['/sprints/backlog', 'Sprint backlog'],
+  ['/sprints/backlog', 'Sprint backlog'],
   ['/projects/1', 'A project'], ['/campaigns/1', 'A campaign'], ['/uploads', 'Uploads'], ['/drops', 'Drive drops'],
   ...['team', 'tasks', 'channels', 'pipeline', 'settings', 'board', 'reports', 'pay', 'ai', 'usage', 'history', 'telegram', 'drive']
     .map((t) => [`/admin?tab=${t}`, `Admin panel · ${t}`]),
