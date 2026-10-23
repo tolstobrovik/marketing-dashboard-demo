@@ -74,7 +74,9 @@ export default function BriefCheck({ text, kind = 'video' }) {
   const bad = out.verdict === 'bad'
   // The mechanical flags are specific and always true; the model's sentence is
   // a reading. The specific one leads.
-  const lead = out.flags?.[0]?.say || out.say
+  // The mechanical flags are the server's six sentences (server/ai.js): said
+  // in the reader's language. The model's own sentence is passed through.
+  const lead = out.flags?.[0]?.say ? tx(out.flags[0].say) : out.say
   const rest = out.missing || []
 
   return (

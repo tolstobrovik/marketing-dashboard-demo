@@ -109,7 +109,7 @@ export default function StageGate({ item, statusId, statusLabel, initialGates = 
             </div>
           </div>
           <label className="gate-link">
-            <input className="input" placeholder="https://instagram.com/p/…" disabled={busy} autoFocus
+            <input className="input" placeholder={'https://instagram.com/p/…'} disabled={busy} autoFocus
               value={link} onChange={(e) => setLink(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && good && !busy) submit({ post_link: link.trim() }) }} />
           </label>
@@ -185,7 +185,7 @@ export default function StageGate({ item, statusId, statusLabel, initialGates = 
         {g.late && !g.late.already && (
           <div className="gate-late-box">
             <p className="gate-late">
-              <AlertTriangle size={14} /> Handed over late — this was due <b>{g.late.was_due}</b>.
+              <AlertTriangle size={14} /> {tx('Handed over late — this was due')} <b>{g.late.was_due}</b>.
               Give the next person a date they can actually meet; the original stays on the task.
             </p>
             <label className="gate-date">
@@ -249,7 +249,7 @@ function LinkAsk({ what, value, busy, onChange }) {
   return (
     <label className="gate-link">
       <span className="gate-hint"><Link2 size={13} /> Where is {what}? Upload it and paste the link.</span>
-      <input className="input" placeholder="https://drive.google.com/…" disabled={busy}
+      <input className="input" placeholder={'https://drive.google.com/…'} disabled={busy}
         value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   )

@@ -193,8 +193,11 @@ export function crewDay({ entries, today, asks = [], fixes = [] }) {
     const due = e.again ? (fixUntil(e.t, e.kind === 'design' ? 'designer' : 'editor', today) || today) : e.due
     const g = !due ? 'none' : due < today ? 'late' : due === today ? 'today' : 'later'
     // What is needed today — an answer, a fix — is under Today, whatever day
-    // the work itself is due.
-    const band = g === 'late' ? 'late' : g === 'today' || ask ? 'today' : 'soon'
+    // the work itself is due. A job with no day at all is its own band, "No
+    // day yet" (the owner, 23 Oct 2026: an editor named on a piece nobody
+    // gave a day to found it nowhere on his screen) — never hidden under
+    // "Coming up" as if it had a day.
+    const band = g === 'late' ? 'late' : g === 'today' || ask ? 'today' : g === 'none' ? 'none' : 'soon'
     const can = e.kind === 'shoot' ? (!!e.due && e.due <= today) : e.filmed
     const state = ask ? 'ask' : e.declined ? 'declined' : e.given === false ? 'early' : can ? 'go' : e.kind === 'shoot' ? 'wait' : 'blocked'
     return { key, t: e.t, kind: e.kind, due, band, state, ask, fix, late: g === 'late' ? daysBetween(due, today) : 0, again: !!e.again, n: null }
@@ -219,7 +222,7 @@ export function crewDay({ entries, today, asks = [], fixes = [] }) {
     if (seen.has(key)) continue
     rows.push(open({ t: { id: r.content_id, title: r.title, channels: r.channels || [], type: r.type, recording_date: r.recording_date, edit_ready_date: r.edit_ready_date, design_ready_date: r.design_ready_date, release_date: r.release_date, edit_due_revised: r.edit_due_revised, review_due_revised: r.review_due_revised }, kind: KIND_OF[r.target] || 'edit', due: null, filmed: true }, key, null, r))
   }
-  const BAND = { late: 0, today: 1, soon: 2, done: 3 }
+  const BAND = { late: 0, today: 1, soon: 2, none: 3, done: 4 }
   const WEIGHT = { fix: 0, ask: 1 }
   const acts = (r) => r.state === 'fix' || r.state === 'ask' || r.state === 'go'
   const hour = (r) => (r.kind === 'shoot' && r.t.recording_time) || '99'
@@ -232,7 +235,7 @@ export function crewDay({ entries, today, asks = [], fixes = [] }) {
   let n = 0
   for (const r of rows) if (acts(r)) r.n = ++n
   const count = (band) => rows.filter((r) => r.band === band).length
-  const counts = { late: count('late'), today: count('today'), soon: count('soon'), done: count('done') }
+  const counts = { late: count('late'), today: count('today'), soon: count('soon'), none: count('none'), done: count('done') }
   const stuck = rows.filter((r) => r.band === 'late' && !r.n)
   const held = stuck.length ? { n: stuck.length, why: stuck.every((r) => r.state === stuck[0].state) ? stuck[0].state : 'mixed' } : null
   return { rows, first: rows.find((r) => r.n === 1) || null, held, counts, total: counts.late + counts.today + counts.done }
@@ -352,6 +355,8 @@ export const kindOfAct = (act) => (act.hat ? act.hat.kind
 //   move    needs something from the maker before it can go on
 //   ready   finished: post it
 //   plan    on time and in somebody else's hands — in the week and the calendar, in none of the five
+//   nodate  the same, with no day at all: it would be on no week and no
+//           calendar, so it is a group of its own on the page (23 Oct 2026)
 //   out     went out
 //
 // → rows   each piece once, with its group, what the window would offer on it
@@ -359,7 +364,7 @@ export const kindOfAct = (act) => (act.hat ? act.hat.kind
 //          the maker has something to press on it now (`actionable`)
 //   first  the first piece they can act on, in that order — the big card
 //   month  how many of this month's pieces are out
-const GROUPS = ['film', 'check', 'fix', 'late', 'move', 'ready', 'plan', 'out']
+const GROUPS = ['film', 'check', 'fix', 'late', 'move', 'ready', 'nodate', 'plan', 'out']
 const THEIRS = ['check', 'move', 'publish', 'ownfix', 'handin', 'ask', 'fix']
 export function makerDay({ pieces, today, userId, pipe, stepOf, roundsOf = () => 0, maxRounds = 2, canReviewOf = () => false }) {
   const rows = []
@@ -384,7 +389,7 @@ export function makerDay({ pieces, today, userId, pipe, stepOf, roundsOf = () =>
         : act.kind === 'fixing' ? 'fix'
           : late ? 'late'
             : ['move', 'ownfix', 'handin', 'ask', 'fix'].includes(act.kind) ? 'move'
-              : act.kind === 'publish' ? 'ready' : 'plan'
+              : act.kind === 'publish' ? 'ready' : due ? 'plan' : 'nodate'
     // What the operator said, for a shoot today. On a piece still at Idea the
     // shoot is planned and not sent: that one is the maker's to send.
     // That holds whatever the operator answered: a yes on an unsent piece is
@@ -394,7 +399,7 @@ export function makerDay({ pieces, today, userId, pipe, stepOf, roundsOf = () =>
     rows.push({ t, group, act, holder: act.holder || act.maker || null, late, state, actionable: THEIRS.includes(act.kind), due, until })
   }
   const key = (r) => (r.group === 'film' ? (r.t.recording_time || '99')
-    : r.group === 'late' || r.group === 'move' || r.group === 'plan' ? (r.due || '9999')
+    : r.group === 'late' || r.group === 'move' || r.group === 'plan' || r.group === 'nodate' ? (r.due || '9999')
       : r.group === 'fix' ? (r.until || '9999')
       : r.group === 'out' ? '' : (reviewDue(r.t) || '9999'))
   rows.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group)

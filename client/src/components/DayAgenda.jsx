@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { X, Plus, Clapperboard, Send, Scissors, Palette } from 'lucide-react'
-import { typeInfo } from '../lib/constants.js'
+import { typeInfo, longDayLabel, localISO } from '../lib/constants.js'
 import { editDue } from '../lib/due.js'
 import { stageRankOf } from '../lib/gaps.js'
 import { tr as tx, locale } from '../lib/i18n.jsx'
@@ -58,7 +58,7 @@ export default function DayAgenda({ date, items, statusesById, canEdit, onOpen, 
   }, [onBack])
 
   const dt = new Date(`${date}T00:00:00`)
-  const heading = dt.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })
+  const heading = longDayLabel(localISO(dt))
 
   return (
     <div className="day-sheet" role="dialog" aria-modal="true" aria-label={heading} onClick={(e) => { if (e.target === e.currentTarget) onBack?.() }}>

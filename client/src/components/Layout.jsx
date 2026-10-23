@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import GetSetUp from './GetSetUp.jsx'
-import { FileQuestion, Menu, Plus, LogOut, Sun, Home, BarChart3, ScrollText, PanelLeftClose, PanelLeftOpen, Search, Palette, ShieldAlert, Timer, LayoutGrid, User, RefreshCw, Clapperboard, Briefcase, GraduationCap, Megaphone, X, CalendarRange, ClipboardList, UploadCloud } from 'lucide-react'
-import Sidebar, { readMenu } from './Sidebar.jsx'
+import { FileQuestion, Menu, Plus, LogOut, Sun, Home, BarChart3, ScrollText, Coins, PanelLeftClose, PanelLeftOpen, Search, Palette, ShieldAlert, Timer, LayoutGrid, User, RefreshCw, Clapperboard, Briefcase, GraduationCap, Megaphone, X, CalendarRange, ClipboardList, UploadCloud } from 'lucide-react'
+import Sidebar from './Sidebar.jsx'
 import MobileTabs, { MoreSheet } from './MobileTabs.jsx'
 import NewTask from './NewTask.jsx'
-import QuickTask from './QuickTask.jsx'
 import QuickFind from './QuickFind.jsx'
 import CoachTour from './CoachTour.jsx'
 import NotificationsBell from './NotificationsBell.jsx'
@@ -21,11 +20,12 @@ import { useUploads } from '../lib/uploads.js'
 import { useAuth } from '../lib/auth.jsx'
 import { useChannels } from '../lib/channels.jsx'
 import { useAutoUpdate, BUILD } from '../lib/useAutoUpdate.js'
+import { lastBoardChannel } from '../lib/boardChannel.js'
 import { useIsPhone } from '../lib/usePhone.js'
 import { useSimpleLook } from '../lib/look.js'
 import { useContextMenu } from './ContextMenu.jsx'
 import { watchTables } from '../lib/stackTables.js'
-import { can, iconFor, todayISO, addDaysISO } from '../lib/constants.js'
+import { can, iconFor, todayISO, addDaysISO, fmtDay } from '../lib/constants.js'
 import { trackUsage, trackPage } from '../lib/usage.js'
 import { startTracking } from '../lib/track.js'
 
@@ -86,7 +86,7 @@ function PlannedUpdate({ notice, user }) {
   const today = todayISO()
   const lead = notice.lead || 3
   if (notice.at && (today < addDaysISO(notice.at, -lead) || today > addDaysISO(notice.at, 1))) return null
-  const when = notice.at ? new Date(`${notice.at}T12:00:00Z`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }) : null
+  const when = notice.at ? fmtDay(notice.at) : null
   const changes = Array.isArray(notice.changes) ? notice.changes : []
   if (seen >= notice.id) {
     return (
@@ -135,17 +135,11 @@ function useDesk() {
   return is
 }
 
-// Giving a task from the shell. The simple look asks four things and makes an
-// idea (QuickTask); the full form is one link away for whoever has the whole
-// brief in hand, and is what the previous look still opens.
-function GiveTask({ simple, onClose }) {
-  const [full, setFull] = useState(null)   // what the quick idea had typed when "More options" was pressed
-  const { pathname } = useLocation()
-  const here = pathname.startsWith('/dept/') ? pathname.split('/')[2] : ''
-  // On the Design board a new task is a design (NewTask reads the page).
-  return simple && !full && !pathname.startsWith('/design')
-    ? <QuickTask defaults={{ channel: here }} onClose={onClose} onFull={(typed) => setFull(typed || {})} />
-    : <NewTask onClose={onClose} carried={full} />
+// Giving a task from the shell: one door for both looks (23 Oct 2026, the
+// owner: "three different task creation views … make one"). NewTask reads
+// the page for the channel and opens the builder (components/builder/).
+function GiveTask({ onClose }) {
+  return <NewTask onClose={onClose} />
 }
 
 export default function Layout() {
@@ -172,14 +166,6 @@ export default function Layout() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-  // Round 14: the phone bar's two slots, as the person chose them under
-  // "Edit menu" (Sidebar.jsx, readMenu) — read again whenever they change.
-  const [menuBar, setMenuBar] = useState(() => readMenu(user?.id).bar || [])
-  useEffect(() => {
-    const on = () => setMenuBar(readMenu(user?.id).bar || [])
-    window.addEventListener('satashkent-menu', on)
-    return () => window.removeEventListener('satashkent-menu', on)
-  }, [user?.id])
   // Full-screen mode: tuck the sidebar away and give the page every pixel.
   const [sideOff, setSideOff] = useState(() => localStorage.getItem('satashkent_side_off') === '1')
   const toggleSide = () => {
@@ -231,9 +217,9 @@ export default function Layout() {
   else if (location.pathname.startsWith('/sprints')) title = t('nav.sprints')
   else if (location.pathname.startsWith('/design')) title = t('nav.design')
   else if (location.pathname.startsWith('/uploads')) title = tx('Uploads')
-  else if (location.pathname.startsWith('/drops')) title = tx('Unmatched files')
+  else if (location.pathname.startsWith('/drops')) title = tx('Lost files')
   else if (location.pathname.startsWith('/ambassador')) title = tx('Ambassadors')
-  else if (location.pathname.startsWith('/people')) title = tx('Monthly notes')
+  else if (location.pathname.startsWith('/people')) title = tx('Notes')
   else if (location.pathname.startsWith('/profile')) title = t('nav.myprofilepage')
   else if (location.pathname.startsWith('/projects') || location.pathname.startsWith('/campaigns')) title = t('nav.projectspage')
   else if (location.pathname.startsWith('/dept/')) title = byKey[location.pathname.split('/')[2]]?.label || t('nav.channel')
@@ -275,7 +261,7 @@ export default function Layout() {
     ...(driveOn ? [{ key: 'uploads', to: '/uploads', label: tx('Uploads'), icon: UploadCloud }] : []),
     { key: 'missed', to: '/missed', label: t('nav.stats'), icon: BarChart3 },
     { key: 'design', to: '/design', label: t('nav.design'), icon: Palette },
-    { key: 'docs', to: '/docs', label: t('nav.docs'), icon: ScrollText },
+    { key: 'docs', to: '/docs', label: t('nav.docs'), icon: Coins },
     { key: 'sprints', to: '/sprints', label: t('nav.sprints'), icon: Timer },
     { key: 'projects', to: '/projects', label: t('nav.projects'), icon: Briefcase },
   ].filter((c) => shows(c.key))
@@ -324,8 +310,8 @@ export default function Layout() {
   const soloMore = [
     ...CANDIDATES.filter((c) => c.key !== soloFirst?.key && c.key !== soloSecond?.key),
     ...(runsProgramme ? [{ key: 'ambassadors', to: '/ambassador', label: tx('Ambassadors'), icon: GraduationCap }] : []),
-    ...(user.superadmin ? [{ key: 'people', to: '/people', label: tx('Monthly notes'), icon: ClipboardList }] : []),
-    ...(driveOn && user.role === 'admin' && !(user.admin_channels || []).length ? [{ key: 'drops', to: '/drops', label: tx('Unmatched files'), icon: FileQuestion }] : []),
+    ...(user.superadmin ? [{ key: 'people', to: '/people', label: tx('Notes'), icon: ClipboardList }] : []),
+    ...(driveOn && user.role === 'admin' && !(user.admin_channels || []).length ? [{ key: 'drops', to: '/drops', label: tx('Lost files'), icon: FileQuestion }] : []),
     { key: 'profile', to: '/profile', label: t('nav.myprofilepage'), icon: User },
   ]
 
@@ -423,7 +409,7 @@ export default function Layout() {
             )}
             {shows('docs') && (
               <NavLink to="/docs" className={({ isActive }) => 'solo-link' + (isActive ? ' active' : '')}>
-                <ScrollText size={16} /> {t('nav.docs')}
+                <Coins size={16} /> {t('nav.docs')}
               </NavLink>
             )}
             {/* Sprints is for the whole team, whatever hats they wear. It was in
@@ -492,19 +478,19 @@ export default function Layout() {
             <button type="button" className="mob-sheet-out" onClick={logout}><LogOut size={16} /> {tx('Sign out')}</button>
             <span className="build-stamp" title={tx('Which build this is')}>{BUILD}</span>
           </>} />
-        {giving && <GiveTask simple={simple} onClose={() => setGiving(false)} />}
+        {giving && <GiveTask onClose={() => setGiving(false)} />}
       </div>
     )
   }
 
-  // Same two slots, same rule: what is switched off is not offered.
+  // Same two slots, same rule: what is switched off is not offered. (Sprints
+  // is no longer a default slot — N-06; it stays a door in the sidebar.)
   const barPicks = [
     { key: 'releases', to: '/calendar', label: tx('Calendar'), icon: CalendarRange },
-    { key: 'sprints', to: '/sprints', label: t('nav.sprints'), icon: Timer },
     { key: 'recordings', to: '/recordings', label: t('nav.recordings'), icon: Clapperboard },
     { key: 'missed', to: '/missed', label: t('nav.stats'), icon: BarChart3 },
     { key: 'design', to: '/design', label: t('nav.design'), icon: Palette },
-    { key: 'docs', to: '/docs', label: t('nav.docs'), icon: ScrollText },
+    { key: 'docs', to: '/docs', label: t('nav.docs'), icon: Coins },
   ].filter((c) => shows(c.key)).slice(0, 2)
   // The simple look, on a phone, for whoever runs channels: their day, their
   // first two channels and More — the same doors their sidebar keeps open.
@@ -513,20 +499,28 @@ export default function Layout() {
   // by the top bar above). The phone keeps the slots that bar's tabs had —
   // the crew's one door, a one-channel member's channel — and More brings up
   // the sidebar, which everybody has now.
-  const defaultSlots = oneChannel
-    ? [soloFirst, soloSecond].filter(Boolean)
-    : memberSimple
-      ? visible.slice(0, 2).map((c) => ({ key: `ch:${c.key}`, to: `/dept/${c.key}`, label: c.label, icon: iconFor(c.icon), mark: chanMark(c) }))
+  // The Coach look's two slots (N-06, section 4.0 of the TZ): Calendar and
+  // the Board for everyone who has channels; Calendar and Design for whoever
+  // draws; Calendar alone for the rest of the crew. The crew's calendar is
+  // their own (the sidebar's "Calendar" for them, CoachCalendar.jsx). The
+  // round-14 menu editor that let a person choose the slots is gone with More.
+  const coachSlots = () => {
+    const drawsHere = !!crewCaps && (crewCaps.includes('designer') || user.role === 'designer')
+    const cal = crewCaps
+      ? { key: 'mycal', to: '/brief/calendar', label: tx('Calendar'), icon: CalendarRange }
+      : shows('releases') ? { key: 'releases', to: '/calendar', label: tx('Calendar'), icon: CalendarRange } : null
+    if (crewCaps) return [cal, drawsHere && shows('design') && { key: 'design', to: '/design', label: t('nav.design'), icon: Palette }].filter(Boolean)
+    const board = visible.length ? { key: 'board', to: `/dept/${lastBoardChannel(user.id, visible)}`, label: tx('Board'), icon: LayoutGrid } : null
+    return [cal, board].filter(Boolean)
+  }
+  const defaultSlots = simple
+    ? coachSlots()
+    : oneChannel
+      ? [soloFirst, soloSecond].filter(Boolean)
       : barPicks
-  // A slot the person chose: a channel drawn as on the menu, a page under its own name.
-  const chosenSlots = simple ? menuBar.filter(Boolean).map((b) => {
-    const c = String(b.key).startsWith('ch:') && visible.find((x) => `ch:${x.key}` === b.key)
-    if (c) return { key: b.key, to: `/dept/${c.key}`, label: c.label, icon: iconFor(c.icon), mark: chanMark(c) }
-    return CANDIDATES.find((p) => p.key === b.key) || (b.to ? { key: b.key, to: b.to, label: b.label, icon: b.key === 'mycal' ? CalendarRange : LayoutGrid } : null)
-  }).filter(Boolean) : []
   const tabs = [
     { key: 'brief', to: '/brief', label: t('nav.brief'), icon: simple ? Home : Sun },
-    ...(chosenSlots.length ? [...chosenSlots, ...defaultSlots.filter((d) => !chosenSlots.some((c) => c.to === d.to))].slice(0, 2) : defaultSlots),
+    ...defaultSlots,
     { key: 'more', onClick: () => setOpen((v) => !v), on: open, label: tx('More'), icon: LayoutGrid },
   ]
   // In the Coach look the sidebar folds to a rail of icons instead of leaving
@@ -593,7 +587,7 @@ export default function Layout() {
         <MobileTabs tabs={tabs} canGive={canGive}
           onNew={() => (canGive ? setGiving(true) : setFinding(true))}
           newLabel={canGive ? tx('Give a task') : tx('Find anything')} />
-        {giving && <GiveTask simple={simple} onClose={() => setGiving(false)} />}
+        {giving && <GiveTask onClose={() => setGiving(false)} />}
       </div>
     </div>
   )

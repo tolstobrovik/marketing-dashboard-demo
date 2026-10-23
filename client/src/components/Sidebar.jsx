@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Link, useLocation } from 'react-router-dom'
-import { Shield, FileQuestion, LogOut, Briefcase, Sun, BarChart3, Clapperboard, UsersRound, ScrollText, Palette, SlidersHorizontal, GripVertical, Eye, EyeOff, Check, RotateCcw, ChevronUp, ChevronDown, Timer, GraduationCap, ChevronRight, Pin, CalendarRange, ClipboardList, UploadCloud, Home, CalendarDays, Plus, Menu, X, MoreHorizontal, Scissors, Volume2, VolumeX, LayoutGrid, HelpCircle, Minus, Lock, PenLine } from 'lucide-react'
+import { Shield, FileQuestion, LogOut, Briefcase, Sun, BarChart3, Clapperboard, UsersRound, ScrollText, Coins, Palette, SlidersHorizontal, GripVertical, Eye, EyeOff, Check, RotateCcw, ChevronUp, ChevronDown, Timer, GraduationCap, ChevronRight, Pin, CalendarRange, ClipboardList, UploadCloud, Home, CalendarDays, Plus, Menu, X, Scissors, Volume2, VolumeX, HelpCircle, Settings } from 'lucide-react'
 import { LogoLockup } from './Logo.jsx'
 import Avatar from './Avatar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
@@ -15,7 +15,6 @@ import { api } from '../lib/api.js'
 import { useUploads } from '../lib/uploads.js'
 import { useSimpleLook } from '../lib/look.js'
 import { soundsOn, setSounds } from '../lib/sound.js'
-import { lastBoardChannel } from '../lib/boardChannel.js'
 import { replayTour } from './CoachTour.jsx'
 
 // ---- personal sidebar (this account, this browser) ----
@@ -141,7 +140,7 @@ export default function Sidebar({ user, onNavigate, onLogout, onGive = null, onF
       { key: 'brief', to: '/brief', label: t('nav.brief'), icon: Sun, locked: true },
       driveOn && shows('uploads') && { key: 'uploads', to: '/uploads', label: tx('Uploads'), icon: UploadCloud },
       // Files dropped into the Drive folders that named no task (Drops.jsx).
-      driveOn && runsEverything && { key: 'drops', to: '/drops', label: tx('Unmatched files'), icon: FileQuestion },
+      driveOn && runsEverything && { key: 'drops', to: '/drops', label: tx('Lost files'), icon: FileQuestion },
       // Overview is no longer in the menu: the daily list it was going to be
       // — overdue, due today, edit ASAP — is the admin's My Day now
       // (CoachAdminDay). The page itself still opens by its address.
@@ -166,10 +165,10 @@ export default function Sidebar({ user, onNavigate, onLogout, onGive = null, onF
     channels: visible.map((c) => ({ key: `ch:${c.key}`, to: `/dept/${c.key}`, label: c.label, icon: iconFor(c.icon) })),
     numbers: [
       shows('missed') && { key: 'missed', to: '/missed', label: t('nav.stats'), icon: BarChart3 },
-      shows('docs') && { key: 'docs', to: '/docs', label: t('nav.docs'), icon: ScrollText },
+      shows('docs') && { key: 'docs', to: '/docs', label: t('nav.docs'), icon: Coins },
     ].filter(Boolean),
     people: [
-      isAdmin && shows('crew') && { key: 'crew', to: '/crew', label: t('nav.crew'), icon: Clapperboard },
+      isAdmin && shows('crew') && { key: 'crew', to: '/crew', label: t('nav.crew'), icon: Scissors },
       // The ambassador programme. Not switchable in Settings on purpose: this
       // is the only page some accounts have, and switching it off would strand
       // them on a board with nothing on it. And it is the one door here that
@@ -181,7 +180,7 @@ export default function Sidebar({ user, onNavigate, onLogout, onGive = null, onF
       // admin's door — a superadmin's, which is a rank an admin does not have
       // until somebody hands it over. Not switchable in Settings either: it
       // is not the team's page to turn off.
-      readsPeople && { key: 'people', to: '/people', label: tx('Monthly notes'), icon: ClipboardList },
+      readsPeople && { key: 'people', to: '/people', label: tx('Notes'), icon: ClipboardList },
       ...(runsEverything ? [{ key: 'admin', to: '/admin', label: t('nav.admin'), icon: Shield }] : []),
     ].filter(Boolean),
   }), [isAdmin, runsEverything, runsProgramme, readsPeople, visible, t, shows, driveOn])
@@ -463,33 +462,30 @@ export const tailOf = (c, net) => {
   const label = String(c.label || '')
   return label.toLowerCase().startsWith(`${net.toLowerCase()} `) ? label.slice(net.length + 1).trim() : ''
 }
-// The menu each person keeps (round 14), in this browser: which places are on
-// it and in what order (`on`), every place known when it was saved (`seen` —
-// one born since keeps its default place), and the phone bar's two slots (`bar`).
-const MENU_KEY = (uid) => `satashkent_menu_${uid}`
-export const readMenu = (uid) => {
-  try { const m = JSON.parse(localStorage.getItem(MENU_KEY(uid)) || 'null'); return m && typeof m === 'object' ? m : {} } catch { return {} }
-}
-const writeMenu = (uid, m) => {
-  try { localStorage.setItem(MENU_KEY(uid), JSON.stringify(m)) } catch { /* a private window forgets */ }
-  window.dispatchEvent(new Event('satashkent-menu'))
-}
-
+// ---- the Coach look's sidebar: one list, every door on it (N-06) ----------------------
+//
+// Round 14 gave the menu a More group and an editor (±, drag handles, the
+// phone-bar mock) because an admin had nineteen doors. The TZ of 19 October
+// 2026 (section 4.0) takes the doors away instead — one Calendar, one Team,
+// one Numbers — so there is nothing left to hide: the menu is one flat list in
+// the order a day runs, and the channel list gets the remaining height and
+// scrolls only beyond it. With More open on a 900 px screen the channels used
+// to shrink to one visible row with their own scrollbar.
+//
+// Until N-01 to N-04 land, the doors they replace keep the places their
+// successors will take — Shoots under Calendar, Post Production under Team,
+// Statistics and Payment where Numbers will be — so the order moves once, not
+// twice. Settings (the Admin panel) is the gear at the foot beside the
+// profile, not a work door. The saved menu of round 14 (`satashkent_menu_*`)
+// is no longer read.
 function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGive, onFold, rail, drawer }) {
   const { t } = useT()
   const { pathname } = useLocation()
   const counts = useChannelCounts()
-  // null: follow the page (open on a page that lives under More); true/false:
-  // what the person pressed. Reset on every page change.
-  const [moreOpen, setMoreOpen] = useState(null)
-  useEffect(() => { setMoreOpen(null) }, [pathname])
+  // The channel list did not come (S-08): the group says so, and offers the
+  // next try now, instead of drawing nothing and leaving the person to guess.
+  const { failed: chansFailed, retry: retryChans } = useChannels()
   const [sound, setSound] = useState(soundsOn)
-  // The menu as this person keeps it (round 14), in this browser.
-  const [menu, setMenu] = useState(() => readMenu(user.id))
-  const save = (m) => { setMenu(m); writeMenu(user.id, m) }
-  const [editing, setEditing] = useState(false)
-  const [slot, setSlot] = useState(null)       // a slot of the phone bar waiting for a place
-  const [dragged, setDragged] = useState(null) // the row being dragged
 
   const at = (to) => pathname === to || pathname.startsWith(`${to}/`)
   const here = (it) => (it.end ? pathname === it.to : at(it.to) || (it.also || []).some(at))
@@ -501,9 +497,9 @@ function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGiv
   }, [pathname, drawer])
 
   // The count beside a channel: what is late, in ruby; when nothing is, a
-  // quiet number of what is in editing; when neither, nothing. A folded
-  // network carries the sum of its channels. The server counts (see
-  // useChannelCounts) — until it has answered there is nothing to draw.
+  // quiet number of what is in editing; when neither, nothing. The server
+  // counts (see useChannelCounts) — until it has answered there is nothing to
+  // draw.
   const sumOf = (list) => list.reduce((a, c) => ({
     late: a.late + (Number(counts?.[c.key]?.late) || 0),
     editing: a.editing + (Number(counts?.[c.key]?.editing) || 0),
@@ -524,14 +520,13 @@ function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGiv
       </Link>
     )
   }
-  // `alone`: under its network a channel's mark is its star or flag by itself.
-  const chan = (c, name = c.label, alone = false) => {
+  const chan = (c) => {
     const on = at(`/dept/${c.key}`)
     const n = sumOf([c])
     return (
       <Link key={c.key} to={`/dept/${c.key}`} className={'co-sn' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined}
         aria-label={named(c.label, n)} title={rail ? c.label : undefined} onClick={onNavigate}>
-        <ChanMark channel={c} size={rail ? 22 : alone ? 18 : 20} alone={alone} /><span className="co-sn-t">{name}</span>{count(n)}
+        <ChanMark channel={c} size={rail ? 22 : 20} /><span className="co-sn-t">{c.label}</span>{count(n)}
       </Link>
     )
   }
@@ -540,148 +535,33 @@ function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGiv
   const pick = (key) => all.find((it) => it.key === key)
   // My Day is /brief exactly: its calendar is the next row, not the same one.
   const day = { ...pick('brief'), icon: Home, end: true }
-  // The person's own calendar. A content maker's month of shoots and releases
-  // is a screen of My Day; for everybody else it is the Master Calendar, where
-  // the board lets them open it. A content maker keeps that one under More.
-  const master = pick('releases')
-  // r11: the crew's own calendar (their shoots, edits and artwork) is a page of
-  // its own too, on the left, rather than a fold under More on My Day.
+  // One Calendar. The crew's is their own (their shoots, edits and artwork,
+  // CoachCalendar.jsx) — the only one they have; everybody else's is the
+  // Master Calendar, "Mine" first (the owner, 13 Oct).
   const crewSeat = ['editor', 'operator', 'designer', 'crew'].includes(user.role)
-  // The owner (13 Oct): one calendar. A content maker's Calendar is the same one
-  // as everybody's (all channels, "Mine" first); the crew keep their own — it is
-  // the only one they have.
+  const master = pick('releases')
   const cal = crewSeat
     ? { key: 'mycal', to: '/brief/calendar', label: tx('Calendar'), icon: CalendarDays }
     : master && { ...master, label: tx('Calendar'), icon: CalendarDays }
-  // r10, the short menu (October survey: "too complicated" 3.0, "easy to use"
-  // 3.3). Five places — My Day, Board, Calendar, Shoots, and More — and the
-  // channels are no longer a list here: they are the picker at the top of the
-  // Board (pages/Department.jsx) and the chips on the Calendar. Somebody whose
-  // whole job is drawing keeps Design beside My Day.
-  const counts0 = sumOf(visible)
-  const board = visible.length ? {
-    key: 'board', to: `/dept/${lastBoardChannel(user.id, visible)}`, label: tx('Board'), icon: LayoutGrid, also: ['/dept'],
-  } : null
   const rec = pick('recordings')
-  const shoots = rec && { ...rec, label: tx('Shoots'), icon: Clapperboard }
-  const draws = user.role === 'designer' || (user.crew_roles || []).includes('designer')
-  const below = [draws && pick('design')].filter(Boolean)
-  const drawn = new Set(['brief', cal?.key, rec?.key, ...below.map((it) => it.key)])
+  const shoots = user.role === 'admin' && rec && { ...rec, label: tx('Shoots'), icon: Clapperboard }
+  // Design is for whoever draws, and for an admin; a maker reaches a designer's
+  // board through the piece.
+  const draws = user.role === 'admin' || user.role === 'designer' || (user.crew_roles || []).includes('designer')
+  const design = draws && pick('design')
+  // The order a day runs: the day, the calendar, the channels, then who and
+  // what — with the interim doors in their successors' places (see above).
+  const above = [cal, shoots].filter(Boolean)
+  const below = [design, pick('team'), pick('crew'), pick('missed'), pick('docs'), pick('projects')].filter(Boolean)
+  const drawn = new Set(['brief', 'releases', 'recordings', 'design', 'admin', ...below.map((it) => it.key)])
+  // Everything else this person may open, in the order the groups keep:
+  // Sprints, Uploads, Unmatched files, Ambassadors, Monthly notes.
   const rest = all.filter((it) => !drawn.has(it.key))
-
-  // ---- the menu as the person keeps it (round 14, the owner's pick: the iPad's tab bar) ----
-  // Every place this person may open is on the menu or under More. Out of the
-  // box the menu is the day, the calendar, their shoots or their drawing and
-  // their channels (back in the sidebar, by name); everything else is under
-  // More. "Edit menu" turns the list into the editor: − sends a row to More,
-  // + brings it back, the dots move it (drag, or the arrow keys), and the
-  // phone's bar has two slots of the person's own choosing.
-  const pages = [board, cal, user.role === 'admin' && shoots, ...below, ...rest].filter(Boolean)
-  const chanPlaces = visible.map((c) => ({ key: `ch:${c.key}`, c, to: `/dept/${c.key}`, label: c.label }))
-  const places = [...pages, ...chanPlaces]
-  const defaultOn = new Set([chanPlaces.length ? null : board?.key, cal?.key, user.role === 'admin' && shoots?.key, ...below.map((it) => it.key), ...chanPlaces.map((p) => p.key)].filter(Boolean))
-  const seen = new Set(menu.seen || [])
-  const isOn = (k) => (seen.has(k) ? (menu.on || []).includes(k) : defaultOn.has(k))
-  const ordered = (list) => list.map((p, i) => [p, i]).sort(([a, i], [b, j]) => {
-    const o = menu.on || [], x = o.indexOf(a.key), y = o.indexOf(b.key)
-    return (x < 0 ? 1e4 + i : x) - (y < 0 ? 1e4 + j : y)
-  }).map(([p]) => p)
-  const mainPages = ordered(pages.filter((p) => isOn(p.key)))
-  const mainChans = ordered(chanPlaces.filter((p) => isOn(p.key)))
-  const morePages = pages.filter((p) => !isOn(p.key))
-  const moreChans = chanPlaces.filter((p) => !isOn(p.key))
-  const commit = (on) => save({ ...menu, on, seen: places.map((p) => p.key) })
-  const onKeys = () => [...mainPages, ...mainChans].map((p) => p.key)
-  const toggle = (k) => { const cur = onKeys(); commit(cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]) }
-  // One row moved before another of its own list (or one step with the arrow keys).
-  const moveTo = (k, before) => {
-    if (k === before) return
-    const cur = onKeys().filter((x) => x !== k)
-    const at = cur.indexOf(before)
-    cur.splice(at < 0 ? cur.length : at, 0, k)
-    commit(cur)
-  }
-  const step = (list, k, d) => {
-    const i = list.findIndex((p) => p.key === k), j = i + d
-    if (i < 0 || j < 0 || j >= list.length) return
-    const cur = onKeys().filter((x) => x !== k)
-    const at = cur.indexOf(list[j].key)
-    cur.splice(d > 0 ? at + 1 : at, 0, k)
-    commit(cur)
-  }
-  // The phone's bar: My Day, two slots, the button in the middle and More.
-  const bar = Array.isArray(menu.bar) ? menu.bar : [null, null]
-  const putIn = (p) => {
-    const next = [bar[0] || null, bar[1] || null]
-    next[slot] = { key: p.key, to: p.to, label: p.label }
-    save({ ...menu, bar: next })
-    setSlot(null)
-  }
-  const reset = () => { save({}); setSlot(null) }
-  // On a page that lives under More, More opens by itself — and it still
-  // folds when pressed (it used to refuse, and looked broken).
-  const inRest = morePages.some(here) || moreChans.some((p) => at(p.to))
-  const more = !rail && (moreOpen ?? inRest)
-
-  const iconOf = (p) => (p.c ? <ChanMark channel={p.c} size={20} /> : <p.icon size={20} aria-hidden="true" />)
-  const editRow = (p, list, on) => (
-    <li key={p.key} className={'co-me-row' + (dragged === p.key ? ' drag' : '')}
-      onDragOver={on ? (e) => { if (dragged && list.some((x) => x.key === dragged)) e.preventDefault() } : undefined}
-      onDrop={on ? (e) => { e.preventDefault(); if (dragged) moveTo(dragged, p.key); setDragged(null) } : undefined}>
-      <button type="button" className={'co-me-pm' + (on ? ' out' : ' in')} onClick={() => toggle(p.key)}
-        aria-label={on ? tx('Send {name} to More', { name: p.label }) : tx('Bring {name} back to the menu', { name: p.label })}>
-        {on ? <Minus size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />}
-      </button>
-      {slot != null
-        ? <button type="button" className="co-me-t pick" onClick={() => putIn(p)}>{iconOf(p)}<span>{p.label}</span></button>
-        : <span className="co-me-t">{iconOf(p)}<span>{p.label}</span></span>}
-      {on && (
-        <button type="button" className="co-me-grip" draggable onDragStart={(e) => { setDragged(p.key); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.key) }}
-          onDragEnd={() => setDragged(null)} onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); step(list, p.key, e.key === 'ArrowUp' ? -1 : 1) } }}
-          aria-label={tx('Move {name}: drag, or the arrow keys', { name: p.label })}>
-          <GripVertical size={16} aria-hidden="true" />
-        </button>
-      )}
-    </li>
-  )
-  const editor = () => (
-    <nav className="co-sb-nav co-me" aria-label={tx('Edit your menu')}>
-      <div className="co-sb-list">
-        <div className="co-me-h"><b>{tx('Edit your menu')}</b><small>{tx('− sends a row to More, + brings it back, the dots drag it.')}</small></div>
-        <p className="co-sn-l">{tx('Your phone’s bar')}</p>
-        <div className="co-me-bar" role="group" aria-label={tx('Your phone’s bar')}>
-          <span className="co-me-fix"><Home size={18} aria-hidden="true" />{t('nav.brief')}</span>
-          {[0, 1].map((i) => (
-            <Fragment key={i}>
-              {i === 1 && <span className="co-me-mid" aria-hidden="true"><Plus size={18} /></span>}
-              <button type="button" className={'co-me-slot' + (bar[i] ? '' : ' empty')} aria-pressed={slot === i} onClick={() => setSlot(slot === i ? null : i)}
-                aria-label={bar[i] ? tx('Slot {n}: {name}. Press, then a place, to change it', { n: i + 1, name: bar[i].label }) : tx('Slot {n} is empty. Press, then a place', { n: i + 1 })}>
-                {bar[i] ? <><MoreHorizontal size={18} aria-hidden="true" /><span>{bar[i].label}</span></> : <><Plus size={18} aria-hidden="true" /><span>{tx('Empty')}</span></>}
-              </button>
-            </Fragment>
-          ))}
-          <span className="co-me-fix"><LayoutGrid size={18} aria-hidden="true" />{tx('More')}</span>
-        </div>
-        <p className="co-me-hint">{slot != null ? tx('Now press a place below for slot {n}.', { n: slot + 1 }) : tx('Press a slot, then a place.')}</p>
-        <p className="co-sn-l">{tx('On your menu')}</p>
-        <ul className="co-me-list">
-          <li className="co-me-row lock"><span className="co-me-pm lock" aria-hidden="true"><Lock size={13} /></span><span className="co-me-t"><Home size={20} aria-hidden="true" /><span>{day.label}</span></span></li>
-          {mainPages.map((p) => editRow(p, mainPages, true))}
-        </ul>
-        {mainChans.length > 0 && <><p className="co-sn-l">{t('nav.channels')}</p><ul className="co-me-list">{mainChans.map((p) => editRow(p, mainChans, true))}</ul></>}
-        {(morePages.length > 0 || moreChans.length > 0) && (
-          <><p className="co-sn-l">{tx('More')}</p><ul className="co-me-list">{[...morePages, ...moreChans].map((p) => editRow(p, [], false))}</ul></>
-        )}
-      </div>
-      <div className="co-me-f">
-        <button type="button" className="co-link" onClick={reset}>{tx('Put this menu back')}</button>
-        <button type="button" className="co-btn co-btn-p co-btn-sm" onClick={() => { setEditing(false); setSlot(null) }}><Check size={16} aria-hidden="true" />{tx('Done')}</button>
-      </div>
-    </nav>
-  )
+  const settings = pick('admin')
 
   const foldWord = drawer ? tx('Close the menu') : rail ? tx('Open the menu') : tx('Fold the menu')
   const soundWord = sound ? tx('Sound is on') : tx('Sound is off')
+  const tourWord = tx('Replay the tour')
   return (
     <>
       <div className="co-sb-top">
@@ -694,66 +574,50 @@ function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGiv
           {drawer ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
       </div>
-      {/* Whoever may create gets the one filled button; whoever may not keeps
-          its room, so My Day is in the same place on every desk. */}
+      {/* Whoever may create gets the button (tonal, S-03: ruby is for the one
+          step to press, where you are and what is late — not for a door on every
+          page); whoever may not keeps its room, so My Day is in the same place
+          on every desk. */}
       {onGive ? (
-        <button type="button" className="co-btn co-btn-p co-sb-new" onClick={() => { onNavigate(); onGive() }}
+        <button type="button" className="co-btn co-btn-s co-sb-new" onClick={() => { onNavigate(); onGive() }}
           title={rail ? tx('New task') : undefined} aria-label={tx('New task')}>
           <Plus size={20} aria-hidden="true" /><span>{tx('New task')}</span>
         </button>
       ) : <div className="co-sb-gap" />}
-      {/* Two lists, each with its own scroll: with eleven channels in one
-          column More was under the bottom edge, and More is the only door to
-          half the board. The channels give way; these stay. */}
-      {editing && !rail ? editor() : (
-        <nav className="co-sb-nav" aria-label={tx('Main')}>
-          <div className="co-sb-list" ref={list}>
-            {row(day)}
-            {mainPages.map((it) => row(it, it.key === 'board' ? count(counts0) : it.key === 'uploads' && upBadge ? <span className="nav-badge">{upBadge}</span> : null))}
-            {mainChans.length > 0 && (
-              <>
-                {!rail && <p className="co-sn-l">{t('nav.channels')}</p>}
-                {mainChans.map((p) => chan(p.c))}
-              </>
-            )}
-          </div>
-          <div className="co-sb-rest">
-            <hr className="co-sn-hr" />
-            {/* Every other page this person may open, behind one row. Folded to
-                the rail there is no room for their names, so More opens the
-                sidebar. */}
-            <button type="button" className={'co-sn co-sn-grp' + (rail && inRest ? ' on' : '')} aria-expanded={more}
-              aria-label={tx('More')} title={rail ? tx('More') : undefined}
-              onClick={() => { if (rail) { onFold(); setMoreOpen(true) } else setMoreOpen(!more) }}>
-              <MoreHorizontal size={20} aria-hidden="true" /><span className="co-sn-t">{tx('More')}</span>
-              {/* Files on their way say how far they have got from any page, so
-                  the number rides on More while More is shut. */}
-              {!more && upBadge && <span className="nav-badge">{upBadge}</span>}
-              <ChevronDown size={16} className="co-sn-chev" aria-hidden="true" />
-            </button>
-            {more && (
-              <div className="co-sn-sub">
-                {morePages.map((it) => row(it, it.key === 'uploads' && upBadge ? <span className="nav-badge">{upBadge}</span> : null))}
-                {moreChans.map((p) => chan(p.c))}
-                {/* r11 · whoever makes pieces chooses what their ten colours mean. */}
-                {onGive && (
-                  <Link to="/colours" className={'co-sn' + (at('/colours') ? ' on' : '')} onClick={onNavigate}>
-                    <Palette size={20} aria-hidden="true" /><span className="co-sn-t">{tx('My colours')}</span>
-                  </Link>
-                )}
-                <button type="button" className="co-sn" onClick={() => { onNavigate(); replayTour() }}>
-                  <HelpCircle size={20} aria-hidden="true" /><span className="co-sn-t">{tx('Replay the tour')}</span>
-                </button>
-              </div>
-            )}
-            {!rail && (
-              <button type="button" className="co-sn co-sn-edit" onClick={() => setEditing(true)}>
-                <PenLine size={18} aria-hidden="true" /><span className="co-sn-t">{tx('Edit menu')}</span>
-              </button>
-            )}
-          </div>
-        </nav>
-      )}
+      <nav className="co-sb-nav" aria-label={tx('Main')}>
+        {/* One list with its own scroll: it takes the height between the
+            button and the foot, so nothing is squeezed and nothing is hidden. */}
+        <div className="co-sb-list" ref={list}>
+          {row(day)}
+          {above.map((it) => row(it))}
+          {visible.length > 0 && (
+            <>
+              {!rail && <p className="co-sn-l">{t('nav.channels')}</p>}
+              {visible.map(chan)}
+            </>
+          )}
+          {visible.length === 0 && chansFailed && !rail && (
+            <>
+              <p className="co-sn-l">{t('nav.channels')}</p>
+              <p className="co-sn-note" role="status">
+                {tx('Channels did not load. Retrying…')}{' '}
+                <button type="button" className="co-link" onClick={retryChans}>{tx('Retry now')}</button>
+              </p>
+            </>
+          )}
+          {(below.length > 0 || rest.length > 0 || onGive) && <hr className="co-sn-hr" />}
+          {below.map((it) => row(it))}
+          {rest.map((it) => row(it, it.key === 'uploads' && upBadge ? <span className="nav-badge">{upBadge}</span> : null))}
+          {/* r11 · whoever makes pieces chooses what their ten colours mean.
+              A row until A-07 moves it under Profile → Appearance. */}
+          {onGive && (
+            <Link to="/colours" className={'co-sn' + (at('/colours') ? ' on' : '')} aria-current={at('/colours') ? 'page' : undefined}
+              aria-label={tx('My colours')} title={rail ? tx('My colours') : undefined} onClick={onNavigate}>
+              <Palette size={20} aria-hidden="true" /><span className="co-sn-t">{tx('My colours')}</span>
+            </Link>
+          )}
+        </div>
+      </nav>
       <div className="co-sb-foot">
         <Link to="/profile" className={'co-sb-me' + (at('/profile') ? ' on' : '')} onClick={onNavigate}
           title={t('nav.myprofile')} aria-label={`${user.name} — ${t('nav.myprofile')}`}>
@@ -761,6 +625,17 @@ function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGiv
           <span className="co-sb-who"><b>{user.name}</b><small>{jobOf(user)}</small></span>
         </Link>
         <div className="co-sb-set">
+          {/* Settings is the Admin panel: the board's furniture, beside the
+              person who keeps it — not among the work doors (section 4.0). */}
+          {settings && (
+            <Link to="/admin" className={'co-sb-ib' + (at('/admin') ? ' on' : '')} aria-current={at('/admin') ? 'page' : undefined}
+              title={t('nav.admin')} aria-label={t('nav.admin')} onClick={onNavigate}>
+              <Settings size={18} aria-hidden="true" />
+            </Link>
+          )}
+          <button type="button" className="co-sb-ib" onClick={() => { onNavigate(); replayTour() }} title={tourWord} aria-label={tourWord}>
+            <HelpCircle size={18} aria-hidden="true" />
+          </button>
           <button type="button" className="co-sb-ib" aria-pressed={sound} aria-label={tx('Sound')} title={soundWord}
             onClick={() => { setSounds(!sound); setSound(!sound) }}>
             {sound ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Clock } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { todayISO } from '../lib/constants.js'
+import { todayISO, fmtDay, longDayLabel } from '../lib/constants.js'
 import { tr as tx, locale } from '../lib/i18n.jsx'
 import { useIsPhone } from '../lib/usePhone.js'
 
@@ -132,11 +132,11 @@ export default function Timetable({ userId, excludeId, value, onPick, mins = 120
         </button>
         <b className="tt-when">
           {phone
-            ? new Date(`${start}T00:00:00Z`).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' })
+            ? longDayLabel(start)
             : <>
-                {new Date(`${start}T00:00:00Z`).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+                {fmtDay(start, { weekday: false })}
                 {' – '}
-                {new Date(`${addDays(start, 6)}T00:00:00Z`).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+                {fmtDay(addDays(start, 6), { weekday: false })}
               </>}
         </b>
         <button type="button" className="btn btn-sm btn-icon"

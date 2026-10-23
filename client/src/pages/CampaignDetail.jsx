@@ -96,7 +96,7 @@ export default function CampaignDetail() {
 
   return (
     <>
-      <button className="btn btn-sm" style={{ marginBottom: 12 }} onClick={() => navigate(-1)}><ArrowLeft size={14} /> Back</button>
+      <button className="btn btn-sm" style={{ marginBottom: 12 }} onClick={() => navigate(-1)}><ArrowLeft size={14} /> {tx('Back')}</button>
 
       {/* A. Header */}
       <div className="card card-pad pc-header">
@@ -106,16 +106,16 @@ export default function CampaignDetail() {
           <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <StatusBadge status={c.status} />
             {canWrite && (
-              <button className="icon-btn" data-tip="Edit campaign fields" data-tip-left="" onClick={() => setEditing(true)} aria-label="Edit">
+              <button className="icon-btn" data-tip={tx('Edit campaign fields')} data-tip-left="" onClick={() => setEditing(true)} aria-label="Edit">
                 <Pencil size={15} />
               </button>
             )}
             {isAdmin && (
-              <button className="icon-btn del-btn" data-tip="Delete this campaign" data-tip-left=""
+              <button className="icon-btn del-btn" data-tip={tx('Delete this campaign')} data-tip-left=""
                 onClick={async () => {
                   if (!confirm(`Delete the campaign “${c.name}”?\n\nIts content cards stay but lose the campaign tag.`)) return
                   try { await api.del(`/campaigns/${c.id}`); navigate('/projects') } catch (e) { alert(e.message) }
-                }} aria-label="Delete campaign">
+                }} aria-label={tx('Delete campaign')}>
                 <Trash2 size={15} />
               </button>
             )}
@@ -124,18 +124,18 @@ export default function CampaignDetail() {
         <div className="stat-sub" style={{ marginTop: 2 }}>
           {c.project_name
             ? <a className="pc-link" onClick={() => navigate(`/projects/${c.project_id}`)}>{c.project_name}</a>
-            : <span className="pc-red">no project</span>}
-          {' · '}{c.owner_name || <span className="pc-red">no owner</span>}
+            : <span className="pc-red">{tx('no project')}</span>}
+          {' · '}{c.owner_name || <span className="pc-red">{tx('no owner')}</span>}
           {c.goal ? ` · ${c.goal}` : ''}
         </div>
         <div className="pc-when-row">
           {c.start_date && c.end_date ? (
             <span className="pc-when-big">{dateLabel(c.start_date)} → {dateLabel(c.end_date)}</span>
           ) : (
-            <span className="pc-when-big late">no dates yet</span>
+            <span className="pc-when-big late">{tx('no dates yet')}</span>
           )}
           {c.days_left != null && c.status !== 'done' && (
-            <span className="pc-days" data-tip="Days until the end date">{c.days_left >= 0 ? `${c.days_left}d left` : 'ended'}</span>
+            <span className="pc-days" data-tip={tx('Days until the end date')}>{c.days_left >= 0 ? `${c.days_left}d left` : 'ended'}</span>
           )}
         </div>
         {c.description && <p className="pc-desc">{c.description}</p>}
@@ -186,7 +186,7 @@ export default function CampaignDetail() {
 
       {/* D. Content — only cards tagged to this campaign, across all channels */}
       <div className="section-head" style={{ marginTop: 18 }}>
-        <h2>Content</h2>
+        <h2>{tx('Content')}</h2>
         <span className="count">· {tagged.length} card{tagged.length === 1 ? '' : 's'}</span>
         <span className="spacer" />
         {/* The same cards on the Master Calendar: every channel this campaign
@@ -203,7 +203,7 @@ export default function CampaignDetail() {
           </button>
         )}
         {can(user, 'manage_content') && (
-          <button className="btn btn-primary btn-sm" onClick={() => setOpenItem('new')}>New card</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setOpenItem('new')}>{tx('New card')}</button>
         )}
       </div>
       {tagged.length === 0 ? (

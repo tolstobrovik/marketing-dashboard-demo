@@ -4,6 +4,7 @@ import {
   Instagram, Send, Youtube, Target, Music2, Twitter, Linkedin, AtSign,
 } from 'lucide-react'
 import { Face, firstName, dayShort, lateWords } from './CoachParts.jsx'
+import Timeline, { timelineOf } from './Timeline.jsx'
 import { iconFor } from '../lib/constants.js'
 import { wayOf, ownersOf, daysBetween } from '../lib/coach.js'
 import { tr as tx } from '../lib/i18n.jsx'
@@ -161,43 +162,20 @@ export function LaneHead({ stage, label = null, count = null }) {
 }
 
 // ---- the capsule ---------------------------------------------------------------------
-export function Capsule({ t, pipe, making, userId, person, posted = '' }) {
-  const stops = wayOf(t, pipe, making).filter((s) => s.cls !== 'skip')
+// Round 18 (23 Oct 2026): the capsule is the timeline (components/Timeline.jsx)
+// in its `top` size — every stop with its word, whose it is and its day, the
+// stop the piece is on lit. Drawn for everybody now: position says whose
+// turn it is, where the words used to.
+export function Capsule({ t, pipe, making, userId, person, posted = '', today = '' }) {
+  const stops = timelineOf(t, pipe, making, { person, userId, today })
   if (!stops.length) return null
-  const last = stops.length - 1
-  // A piece that is out has every stop behind it: the last one stays open and
-  // says when.
-  const found = stops.findIndex((s) => s.cls === 'on')
-  const on = found >= 0 ? found : t.done_at ? last : -1
-  const name = (id) => (id == null ? '' : id === userId ? tx('You') : firstName(person?.(id)))
-  const said = on < 0 ? '' : tx('Step {n} of {of}: {stage}', { n: on + 1, of: stops.length, stage: tx(stops[on].label || '') })
+  if (posted && t.done_at) stops[stops.length - 1].when = posted
+  const on = stops.findIndex((s) => s.state === 'on')
+  const said = on < 0 ? '' : tx('Step {n} of {of}: {stage}', { n: on + 1, of: stops.length, stage: stops[on].label })
   return (
-    <div className="co-capwrap">
-      <ol className="co-cap" aria-label={said || undefined}>
-        {stops.map((s, i) => {
-          const Icon = STAGE_ICON[stageKey(s)] || Lightbulb
-          const word = tx(s.label || '')
-          if (i === on) {
-            return (
-              <li key={s.id} className="on" aria-current="step">
-                <Icon size={18} aria-hidden="true" />
-                <span><b>{word}</b><small>{i === last ? posted : name(s.who) || tx('nobody yet')}</small></span>
-              </li>
-            )
-          }
-          const done = on < 0 ? s.cls === 'done' : i < on
-          const who = name(s.who)
-          return (
-            <li key={s.id} className={done ? 'done' : 'todo'} title={who ? `${word} — ${who}` : word}>
-              {done && s.who && person?.(s.who)
-                ? <span className="co-cap-f"><Face person={person(s.who)} /><i aria-hidden="true"><Check size={9} strokeWidth={3} /></i></span>
-                : done ? <Check size={18} aria-hidden="true" /> : <Icon size={18} aria-hidden="true" />}
-              <em>{word}</em>
-            </li>
-          )
-        })}
-      </ol>
-    </div>
+    <nav className="co-capwrap" aria-label={said || tx('Stages')}>
+      <Timeline size="top" stops={stops} youId={userId} />
+    </nav>
   )
 }
 

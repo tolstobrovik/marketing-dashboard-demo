@@ -29,9 +29,9 @@ export default function RolePicker({ role, crewRoles, onChange }) {
   return (
     <>
       <select className="select" value={kind} onChange={(e) => setKind(e.target.value)}>
-        <option value="member">Member — runs channels</option>
-        <option value="crew">Production crew — films, edits or designs</option>
-        <option value="admin">Admin</option>
+        <option value="member">{tx('Member — runs channels')}</option>
+        <option value="crew">{tx('Production crew — films, edits or designs')}</option>
+        <option value="admin">{tx('Admin')}</option>
       </select>
       {kind === 'crew' && (
         <div className="checkbox-row" style={{ marginTop: 8 }}>

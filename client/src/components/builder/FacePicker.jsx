@@ -29,7 +29,7 @@ export default function FacePicker({ label, Icon, people, value, onChange, requi
         {shown.map((u) => {
           const on = isOn(u.id)
           return (
-            <button key={u.id} type="button" className={'tb-face' + (on ? ' on' : '')} aria-pressed={on}
+            <button key={u.id} type="button" className={'tb-face' + (on ? ' on' : '')} aria-pressed={on} aria-label={u.name}
               onClick={() => choose(u.id)}>
               <Avatar name={u.name} color={u.color} src={u.avatar} size="sm" />
               <span>{u.name.split(' ')[0]}</span>

@@ -72,7 +72,7 @@ function CreativesEditor({ items, canEdit, onChange }) {
   return (
     <div className="field" style={{ marginTop: 4 }}>
       <div className="pc-check-head">
-        <h3>Creatives</h3>
+        <h3>{tx('Creatives')}</h3>
         <span className="stat-sub">{items.length ? `${items.length} of 20` : 'scripts and visuals for this run'}</span>
       </div>
       {items.map((c, i) => (
@@ -81,25 +81,25 @@ function CreativesEditor({ items, canEdit, onChange }) {
             {c.photo_thumb || c.photo ? (
               <Zoom className="creative-thumb" src={c.photo_thumb || c.photo} full={c.photo || c.photo_thumb} alt={c.title || ''} />
             ) : canEdit ? (
-              <label className="creative-thumb creative-pick" data-tip="Attach a photo">
+              <label className="creative-thumb creative-pick" data-tip={tx('Attach a photo')}>
                 <ImagePlus size={16} />
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => pickPhoto(i, e)} />
               </label>
             ) : null}
             <input className="input pc-mini" style={{ flex: 1, fontWeight: 700 }} disabled={!canEdit}
-              value={c.name} placeholder="Creative name…"
+              value={c.name} placeholder={tx('Creative name…')}
               onChange={(e) => set(i, { name: e.target.value })} />
             {canEdit && (c.photo || c.photo_thumb) && (
-              <button type="button" className="icon-btn" data-tip="Remove the photo" data-tip-left=""
-                onClick={() => set(i, { photo: null, photo_thumb: null })} aria-label="Remove photo"><X size={14} /></button>
+              <button type="button" className="icon-btn" data-tip={tx('Remove the photo')} data-tip-left=""
+                onClick={() => set(i, { photo: null, photo_thumb: null })} aria-label={tx('Remove photo')}><X size={14} /></button>
             )}
             {canEdit && (
-              <button type="button" className="icon-btn del-btn" data-tip="Delete this creative" data-tip-left=""
-                onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Delete creative"><Trash2 size={14} /></button>
+              <button type="button" className="icon-btn del-btn" data-tip={tx('Delete this creative')} data-tip-left=""
+                onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={tx('Delete creative')}><Trash2 size={14} /></button>
             )}
           </div>
           <textarea className="input" rows={2} disabled={!canEdit} value={c.script}
-            placeholder="Script / description — hook, text, CTA…"
+            placeholder={tx('Script / description — hook, text, CTA…')}
             onChange={(e) => set(i, { script: e.target.value })} />
         </div>
       ))}
@@ -154,18 +154,18 @@ function ProgramForm({ program, channel, isAdmin, onClose, onSaved, onDeleted, p
       title={creating ? 'New program' : 'Program'}
       onClose={onClose}
       footer={<>
-        {!creating && <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> Delete</button>}
+        {!creating && <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> {tx('Delete')}</button>}
         <span className="foot-gap" />
-        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn" onClick={onClose}>{tx('Cancel')}</button>
         <button className="btn btn-primary" onClick={save}>{creating ? 'Launch plan' : 'Save'}</button>
       </>}
     >
       {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-      <div className="field"><label>Name</label>
+      <div className="field"><label>{tx('Name')}</label>
         <input className="input" autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-          placeholder="e.g. Lead gen — August intake" />
+          placeholder={tx('e.g. Lead gen — August intake')} />
       </div>
-      <div className="field"><label>State</label>
+      <div className="field"><label>{tx('State')}</label>
         <div className="prog-states">
           {PROGRAM_STATES.map((s) => {
             const Icon = s.icon
@@ -181,7 +181,7 @@ function ProgramForm({ program, channel, isAdmin, onClose, onSaved, onDeleted, p
           })}
         </div>
       </div>
-      <div className="field"><label>Platform</label>
+      <div className="field"><label>{tx('Platform')}</label>
         <div className="prog-states">
           {PLATFORMS.map((pl) => {
             const on = form.platform === pl.key
@@ -196,7 +196,7 @@ function ProgramForm({ program, channel, isAdmin, onClose, onSaved, onDeleted, p
           })}
         </div>
       </div>
-      <div className="field"><label>Branch <span className="stat-sub">— which filial this launch targets (pick several if needed)</span></label>
+      <div className="field"><label>{tx('Branch')} <span className="stat-sub">{tx('— which filial this launch targets (pick several if needed)')}</span></label>
         <div className="checkbox-row">
           {BRANCHES.map((b) => (
             <label key={b.key} className={'checkbox-chip chip-sm' + (form.branches.includes(b.key) ? ' on' : '')}>
@@ -207,19 +207,19 @@ function ProgramForm({ program, channel, isAdmin, onClose, onSaved, onDeleted, p
         </div>
       </div>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <div className="field"><label>Start</label>
+        <div className="field"><label>{tx('Start')}</label>
           <input className="input" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
         </div>
-        <div className="field"><label>End <span className="stat-sub">(blank = open-ended)</span></label>
+        <div className="field"><label>{tx('End')} <span className="stat-sub">(blank = open-ended)</span></label>
           <input className="input" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
         </div>
       </div>
-      <div className="field"><label>Budget <span className="stat-sub">(optional)</span></label>
+      <div className="field"><label>{tx('Budget')} <span className="stat-sub">{tx('(optional)')}</span></label>
         <input className="input" type="number" min="0" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} />
       </div>
-      <div className="field"><label>Note <span className="stat-sub">(optional)</span></label>
+      <div className="field"><label>{tx('Note')} <span className="stat-sub">{tx('(optional)')}</span></label>
         <input className="input" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })}
-          placeholder="Audience, creative, landing…" />
+          placeholder={tx('Audience, creative, landing…')} />
       </div>
       <CreativesEditor
         items={form.creatives}
@@ -333,14 +333,14 @@ export default function ProgramsGantt({ channel, canManage, isAdmin = false, len
     return c
   }, [visible])
 
-  if (!loaded) return <div className="card card-pad empty">Loading programs…</div>
+  if (!loaded) return <div className="card card-pad empty">{tx('Loading programs…')}</div>
 
   if (programs.length === 0) {
     return (
       <div className="card card-pad empty" style={{ textAlign: 'center' }}>
         <Rocket size={26} style={{ color: 'var(--brand-500)' }} />
-        <div style={{ fontWeight: 700, color: 'var(--ink-2)', margin: '6px 0 2px' }}>No programs yet</div>
-        <div className="stat-sub">Track every launch as a bar on the timeline — running, halted, finished.</div>
+        <div style={{ fontWeight: 700, color: 'var(--ink-2)', margin: '6px 0 2px' }}>{tx('No programs yet')}</div>
+        <div className="stat-sub">{tx('Track every launch as a bar on the timeline — running, halted, finished.')}</div>
         {canManage && (
           <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => setModal('new')}>
             <Plus size={15} /> New program
@@ -355,7 +355,7 @@ export default function ProgramsGantt({ channel, canManage, isAdmin = false, len
     <>
       {/* the fleet at a glance — the running count in BIG type */}
       <div className="prog-summary">
-        <span className="prog-big" data-tip="Programs live right now">
+        <span className="prog-big" data-tip={tx('Programs live right now')}>
           <b>{counts.running}</b> running now
         </span>
         {PROGRAM_STATES.map((s) => (
@@ -368,7 +368,7 @@ export default function ProgramsGantt({ channel, canManage, isAdmin = false, len
         ))}
         <span className="spacer" />
         {canManage && (
-          <button className="btn btn-primary btn-sm" onClick={() => setModal('new')}><Plus size={15} /> New program</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setModal('new')}><Plus size={15} /> {tx('New program')}</button>
         )}
       </div>
 

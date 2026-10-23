@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Clapperboard, Scissors, Palette, Lightbulb, Send, Check, Clock, ArrowRight, Inbox, ChevronDown, Bell, Video } from 'lucide-react'
+import { Clapperboard, Scissors, Palette, Lightbulb, Send, Check, Clock, Inbox, ChevronDown, Bell, Video } from 'lucide-react'
 import Avatar from './Avatar.jsx'
 import { api } from '../lib/api.js'
-import { iconFor, fixMonth, serverNow, longDayLabel, tashkentDay, isWritingChannel } from '../lib/constants.js'
+import { iconFor, fixMonth, fmtDay, serverNow, longDayLabel, tashkentDay, isWritingChannel } from '../lib/constants.js'
 import { addDays, wayOf } from '../lib/coach.js'
 import { monthTone, monthShortOf, monthLongOf } from '../lib/planMonth.js'
 import { hintOpen, closeHint, openHint } from '../lib/look.js'
@@ -39,6 +39,32 @@ export function KindTile({ kind, done = false, size = 18 }) {
   const K = KIND[kind] || KIND.idea
   const Icon = done ? Check : K.Icon
   return <span className={`co-kic ${done ? 'co-k-good' : K.cls}`} aria-hidden="true"><Icon size={size} /></span>
+}
+
+// A board stage as one of the same marks (round 17, 23 Oct 2026 — the owner:
+// "too vague"; one vocabulary of marks, the same on every screen). The stage
+// is matched by its label the way statusIcon in lib/constants.js matches it,
+// so a renamed or custom stage still lands on a mark; a stage nothing matches
+// is drawn as a thought.
+export const stageKindOf = (label) => {
+  const l = String(label || '').toLowerCase()
+  if (/idea|g[ʻ'`]?oya|иде/.test(l)) return 'idea'
+  if (/shoot|s[yj]omka|съ[её]м|suratga/.test(l)) return 'shoot'
+  if (/edit|montaj|монтаж|writ/.test(l)) return 'edit'
+  if (/design|art|dizayn|дизайн/.test(l)) return 'design'
+  if (/ready|review|approv|tayyor|провер|tekshir/.test(l)) return 'send'
+  if (/publish|post|done|live|chiq|опубл|вышл/.test(l)) return 'out'
+  return 'idea'
+}
+export function StageMark({ status, size = 13, text = true, className = '' }) {
+  if (!status) return null
+  const K = KIND[stageKindOf(status.label)]
+  const name = tx(status.label || '')
+  return (
+    <span className={`co-stage ${K.cls}${className ? ` ${className}` : ''}`} title={name}>
+      <K.Icon size={size} aria-hidden="true" />{text && <span>{name}</span>}
+    </span>
+  )
 }
 
 // Whose shoot and whose edit, as one mark (r11, the editor's and operator's
@@ -122,9 +148,9 @@ const UZ_DAYS = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan']   // Sunda
 const at = (iso) => new Date(`${iso}T12:00:00Z`)
 export const weekdayShort = (iso) => (lang() === 'uz' ? UZ_DAYS[at(iso).getUTCDay()]
   : at(iso).toLocaleDateString(locale(), { weekday: 'short', timeZone: 'UTC' }))
-export const dayMonth = (iso) => fixMonth(at(iso).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }), at(iso).getUTCMonth())
-// "Mon 5 Oct", for a label; and the same day in the middle of a line.
-export const dayShort = (iso) => `${weekdayShort(iso)} ${dayMonth(iso)}`
+export const dayMonth = (iso) => fmtDay(iso, { weekday: false })
+// "Fri 6 Nov", for a label (the one format of S-06); and the same day in the middle of a line.
+export const dayShort = (iso) => fmtDay(iso)
 export function dayInLine(iso, today) {
   if (iso === today) return tx('today')
   if (iso === addDays(today, 1)) return tx('tomorrow')
@@ -202,27 +228,41 @@ export function Summary({ today, name, segs, filter, onFilter, progress, hint, c
   )
 }
 
-// ---- the big card: start here --------------------------------------------------------
-// The one task to do now: what it is, why it is first, the button, and what
-// happens after the button is pressed. Its title opens the task.
-export function Hero({ kind, eyebrow, title, onOpen, why, meta, buttons, after, number = null, mark = null }) {
+// ---- the big card: start here (D-02) ---------------------------------------------------
+// One card for every role — a maker, an operator, an editor, a designer — with
+// different words. White, a 4 px left rule in the kind's colour (ruby when the
+// step is the maker's own), "Start here" in sentence case, the title, one
+// plain sentence, the one button sized to its label, and "Open the task" as a
+// quiet button beside it. Never a form: the drop box and the questions are
+// the window's (the button opens it with the step in focus). Round 8 had a
+// ruby-tinted card for the maker and a blue one for the crew, differing in
+// colour, layout and content for the same job.
+//
+//   label    what this card is now ("Start here", "Now", "Filming now", "Picked")
+//   line     what rides beside the label: hours, the kind, a badge, "Not now"
+//   mark     a tile before the title (the crew's camera/scissors)
+//   why      the one sentence
+//   buttons  the step's button(s); "Open the task" is added here
+//   extra    something the owner asked to keep on the card (the preview)
+//   after    the quiet line under the buttons ("After the shoot: …")
+export function StartHere({ kind, own = false, label = null, line = null, mark = null, title, onOpen, why, buttons, extra = null, after = null, id = 'co-here-t' }) {
   const K = KIND[kind] || KIND.idea
   return (
-    <section className={`co-hero ${K.cls}`} aria-labelledby="co-hero-t">
-      <div>
-        <div className="co-eyebrow">
-          {number != null && <span className="co-n" aria-hidden="true">{number}</span>}
-          <span className="co-start"><ArrowRight size={12} aria-hidden="true" />{tx('Start here')}</span>
-          {eyebrow}
+    <section className={`co-here ${K.cls}${own ? ' own' : ''}`} aria-labelledby={id}>
+      <p className="co-here-l"><span className="co-here-w">{label ?? tx('Start here')}</span>{line}</p>
+      <div className="co-here-t">
+        {mark}
+        <div>
+          <h2 id={id}><button type="button" onClick={onOpen}>{title}</button></h2>
+          {why && <p className="co-why">{why}</p>}
         </div>
-        <h3 id="co-hero-t"><button type="button" onClick={onOpen}>{mark}{title}</button></h3>
-        <p className="co-why">{why}</p>
-        <div className="co-meta">{meta}</div>
       </div>
-      <div className="co-hero-do">
-        <div className="co-btns">{buttons}</div>
-        {after && <p className="co-after">{after}</p>}
+      {extra}
+      <div className="co-btns">
+        {buttons}
+        <button type="button" className="co-btn co-btn-q" onClick={onOpen}>{tx('Open the task')}</button>
       </div>
+      {after && <p className="co-here-ln">{after}</p>}
     </section>
   )
 }
@@ -386,12 +426,24 @@ export function More({ children, note = '' }) {
 // first time each person opens My Day after it, and never again once they
 // press "Got it". One id a release; the lines are that release's.
 const NEWS = {
-  id: 'r14',
+  id: 'r19',
   lines: () => [
-    tx('Files go straight into the piece’s Drive folder: drop them in the box, no link to paste.'),
-    tx('A press on a task opens the whole task. Its plan is at the side: press a name or a day to change it.'),
-    tx('My Day: what to do now, and today’s shoots or edits beside it. The lists stand side by side.'),
-    tx('The calendar and the menu: your channels are on the left. “Edit menu” chooses what stays and what goes under More.'),
+    tx('Every task is a line of stops — Idea, Shoot, Editing, Out — and the stop it is on is lit. The same line is on My Day, over the task window and in the new task form.'),
+    tx('On My Day the small line in front of a title shows where the piece is; a ring in your colour is the stop that is yours.'),
+    tx('In a new task, When and Who are one step, Plan: press a stop on the line to give it its day and its person.'),
+    tx('Every stage is one mark now — the same icon and colour on the calendar, in the task window and on My Day: a clapperboard is the shoot, scissors the edit, a palette the artwork, a tick what is out.'),
+    tx('In a new task the days are cells: Shoot, Edit, Out. Press a cell to pick its day; Out says “Today” until you change it.'),
+    tx('The task window says in one line where the piece stands, whose turn it is and the day.'),
+    tx('In the menu: “Post Production” is now “Crew”, “Payment” is “Pay”, “Monthly notes” is “Notes”, “Unmatched files” is “Lost files”.'),
+    tx('One way to give a task: where, the idea, when, who, the brief — "Save for now" on every step. A task with no day lands on today; a job with no day is under "No day yet" on your day.'),
+    tx('The calendar is one frame: Shooting and Releasing at the top, channels on the left, stages on the right. On Shooting a name means who films; on Releasing, who edits, designs or owns the piece.'),
+    tx('The menu is one list: every page is on it, nothing is under More. Your channels are in the middle.'),
+    tx('Settings is the gear beside your name at the foot of the menu. The tour is the question mark next to it.'),
+    tx('The phone’s bar has the calendar and your board; the rest is under More, which opens the same list.'),
+    tx('The big card’s button opens the task with your step ready; “Open the task” shows the whole piece.'),
+    tx('In the task a button appears when it can be pressed. Until then the line under the box says what is missing.'),
+    tx('A day is picked on a calendar card and reads the same everywhere: “Fri 6 Nov”.'),
+    // The team is told, every release, that the board records where people struggle (r13; track-suite pins it).
     tx('To make the board easier, it now records which pages you open and what you press — never what you type.'),
   ],
 }

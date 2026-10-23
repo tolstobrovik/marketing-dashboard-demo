@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, FileDown, SlidersHorizontal, Clapperboard, Scissors, Palette } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, FileDown, SlidersHorizontal } from 'lucide-react'
 import Modal from '../Modal.jsx'
 import ClashDialog from '../ClashDialog.jsx'
 import { api } from '../../lib/api.js'
@@ -12,43 +12,40 @@ import { toast } from '../../lib/toast.js'
 import { getPicks, bumpPick } from '../../lib/picks.js'
 import { isPicture, readPicture, readDocument } from '../../lib/picture.js'
 import { tr as tx } from '../../lib/i18n.jsx'
+import StepWhere from './StepWhere.jsx'
 import StepTitle from './StepTitle.jsx'
-import StepType from './StepType.jsx'
-import StepWhen from './StepWhen.jsx'
+import StepPlan from './StepPlan.jsx'
 import StepMore from './StepMore.jsx'
-import StepShoot from './StepShoot.jsx'
-import StepEdit from './StepEdit.jsx'
-import StepDesign from './StepDesign.jsx'
 
 // ---- giving a task, one question at a time ----------------------------------
 //
 // The form this replaces opened as a title, two dropdowns, a description and
 // a button reading "I already know the rest" — behind which were four tabs and
-// fifteen boxes. The things people actually give a new task (read off the
-// last month of the live board: a release day on 79% of them, somebody filming
-// on 70%, an editor on 66%) were on the second and third of those tabs, and
-// the Type box opened on Post while two tasks in three are reels.
+// fifteen boxes. Then there were three ways to give a task — a quick idea, a
+// seven-step builder and the full sheet — and the owner (23 Oct 2026): "it's
+// making it too complicated; take the best of the three and make one".
 //
-// So a task is now a few small questions, one per screen, each with its usual
-// answer already chosen — and only the ones this kind of work, on this
-// channel, has. In the order the work happens:
+// So this is the one door. A few small questions, one per screen, each with
+// its usual answer already chosen — and only the ones this kind of work, on
+// this channel, has:
 //
-//   Name     What needs to be made? — and a description, if there is one.
-//            "Save as draft" makes it right there, with nothing else asked.
-//   Kind     six pictures, one press — and it moves on
-//   Shoot    filmed kinds: who films it, their half-hour, who is in it
-//   Editing  filmed kinds: who edits it, and the day the cut is due
-//   When     a month on a card
-//   Design   designed kinds: who designs it, and the day the artwork is due
-//   Extras   Reference / Script / ТЗ, and files
+//   Where    only when the page did not say: the channel — it decides the rest
+//   Idea     the name, the kind (the channel's usual one already chosen), the
+//            idea in a few words. "Save for now" makes it right here, on today.
+//   Plan     the piece as its line of stops — Idea ✓, Shoot, Edit (or
+//            Artwork), Out (round 18, 23 Oct 2026). A stop pressed opens its
+//            day and its person under the line: who films, with the day and
+//            the hours; who edits; who designs; the day it goes out, on a
+//            month. Who is in it (a paid ad) is under the shoot; whose task
+//            it is (an admin) under the line.
+//   Brief    the script — it goes with the piece to the shoot — a reference,
+//            the ТЗ, and files
 //
-// A reel walks Name → Kind → Shoot → Editing → When → Extras; a post walks
-// Name → Kind → When → Design → Extras; a written channel only Name → Kind →
-// When → Extras. Create is on every screen from the second one on, so
-// somebody who only has a name and a kind is two presses from done. Nothing is lost by leaving: the
-// answers are kept in this browser until the task is made. And "All fields"
-// hands every answer to the full sheet for the rare task that needs a script
-// or a shoot hour on the way in.
+// "Save for now" is on every screen from Idea on, so somebody with only a
+// name is one press from done, and "All fields" hands every answer to the
+// full sheet for the rare task that needs the rest on the way in. Nothing is
+// lost by leaving: the answers are kept in this browser until the task is
+// made.
 //
 // It writes exactly what the sheet wrote for a new idea — same route, same
 // stage, same checks on the server — so the two can never disagree.
@@ -69,13 +66,7 @@ const BRIEF = {
 }
 
 // Which step a refusal about a seat (or the day) belongs to.
-// What a crew switch clears when it is turned off.
-const OFF = {
-  shoot: { operator_id: null, recording_date: '', recording_time: '', recording_end: '', face_ids: [] },
-  edit: { editor_id: null, edit_ready_date: '' },
-  design: { designer_id: null, design_ready_date: '' },
-}
-const SEAT_STEP = { operator_id: 'shoot', editor_id: 'edit', designer_id: 'design', release_date: 'when' }
+const SEAT_STEP = { operator_id: 'plan', editor_id: 'plan', designer_id: 'plan', release_date: 'plan' }
 const DRAFT_DAYS = 7
 const LAST_KEY = 'satashkent_builder_last'
 
@@ -188,17 +179,12 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // Designed: the kinds the crew rule says, or anything given from the
   // Design board — where the channel has designers at all.
   const canDesign = (!!rules?.crew?.designer?.includes(d.type) || !!defaults.design) && asked.crew('designer')
-  // …and only what the person turns on is asked (the owner, 14 Oct 2026: a
-  // reel walked through Shoot, Editing and Design before it could be saved).
-  // On when the page or a draft already said who, or when given as a design.
-  const [want, setWant] = useState(() => ({
-    shoot: !!(defaults.operator_id || defaults.recording_date || saved?.operator_id),
-    edit: !!(defaults.editor_id || saved?.editor_id),
-    design: !!(defaults.design || defaults.designer_id || saved?.designer_id),
-  }))
-  const film = canFilm && want.shoot
-  const edit = canEdit && want.edit
-  const design = canDesign && want.design
+  // The seats a filmed or designed piece has are asked on one step, every
+  // face optional (the switches of round 13 went with the one door, 23 Oct
+  // 2026: a face left empty is a face left empty).
+  const film = canFilm
+  const edit = canEdit
+  const design = canDesign
   // The channel's kind of surface, and the kind of work on it.
   // A short written channel (X, Threads, LinkedIn) is asked as a written one:
   // the form has one written face, and Telegram's item type is read off
@@ -211,18 +197,21 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // design given from the Design board on a known channel.
   const givenOk = !!defaults.channels?.[0] && canUse(defaults.channels[0])
   const skipKind = (format === 'text' || !!defaults.design) && givenOk
+  // Where is asked only when the page did not say and there is a choice.
+  const askWhere = !givenOk && pickable.length > 1
+  // Plan: the days and the seats this kind has on this channel, on one line —
+  // and, for an admin, whose task it is, which every kind has.
   const steps = useMemo(() => [
-    { key: 'title', label: 'Name' }, !skipKind && { key: 'type', label: 'Kind' },
-    // The day it goes out, with the switches for the crew; then only the
-    // crew steps that were turned on.
-    { key: 'when', label: 'When' },
-    film && { key: 'shoot', label: 'Shoot' }, edit && { key: 'edit', label: 'Editing' }, design && { key: 'design', label: 'Design' },
+    askWhere && { key: 'where', label: 'Where' },
+    { key: 'idea', label: 'Idea' },
+    { key: 'plan', label: 'Plan' },
     { key: 'more', label: brief.label },
-  ].filter(Boolean), [film, edit, design, skipKind, brief.label])
+  ].filter(Boolean), [askWhere, brief.label])
+  const ideaAt = steps.findIndex((s) => s.key === 'idea')
   const go = (i) => {
     const n = Math.max(0, Math.min(steps.length - 1, i))
     if (n === step) return
-    if (n > 0 && !d.title.trim()) { setStep(0); return }
+    if (n > ideaAt && !d.title.trim()) { setStep(ideaAt); return }
     setDir(n > step ? 'fwd' : 'back'); setStep(n); setErr('')
   }
   const goTo = (k) => { const i = steps.findIndex((x) => x.key === k); go(i < 0 ? steps.length - 1 : i) }
@@ -246,18 +235,12 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // yet the cut is two days after the shoot and the artwork three days out;
   // a release picked later pulls either back to the day before it. Not
   // written unless it is shown — a deadline nobody saw is not a promise.
+  // (23 Oct 2026: the cut's and the artwork's days are rows on the When
+  // step now, picked or left empty — nothing is worked out behind the
+  // person's back. A deadline nobody saw is not a promise.)
   const filmBooked = film && !!d.operator_id && !!d.recording_date
-  const dayBefore = (floor) => (addDaysISO(d.release_date, -1) >= floor ? addDaysISO(d.release_date, -1) : d.release_date)
-  const within = (v, floor) => !!v && v >= floor && (!d.release_date || v <= d.release_date)
-  const cutFloor = d.recording_date && d.recording_date > today ? d.recording_date : today
-  const cutShown = edit && (filmBooked || !!d.editor_id)
-  const cutDay = !cutShown ? ''
-    : within(d.edit_ready_date, cutFloor) ? d.edit_ready_date
-      : d.release_date && d.release_date >= cutFloor ? dayBefore(cutFloor) : addDaysISO(cutFloor, 2)
-  const artShown = design && !!d.designer_id
-  const artDay = !artShown ? ''
-    : within(d.design_ready_date, today) ? d.design_ready_date
-      : d.release_date ? dayBefore(today) : addDaysISO(today, 3)
+  const cutDay = edit ? d.edit_ready_date : ''
+  const artDay = design ? d.design_ready_date : ''
   // A shoot with its person, day, hour, three dates and a script is BOOKED,
   // and the server puts it straight on "To shoot" (see `shootGateFor` in
   // server/routes/content.js). Said here so it is not a surprise — and, one
@@ -332,6 +315,14 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
     || (statuses || []).find((s) => !/^deleted$/i.test(String(s.label || '')))
   // Added from a kanban column, it lands in that column.
   const startStage = (defaults.status_id && (statuses || []).find((s) => s.id === defaults.status_id)) || ideaStage
+  // A task is born WITH a day. With none it was on no calendar, no week and
+  // no day's list — the owner (23 Oct 2026): "it's going to some kind of
+  // draft mode, and I can only find it with the search". So a piece given no
+  // release day lands on the day it was made (the day a calendar's "+" was
+  // pressed on, else today) — or on its shoot or cut day when those are
+  // later, since nothing goes out before it is filmed. It is an idea, and an
+  // idea's day is moved with one drag.
+  const bornDay = () => d.release_date || [defaults.release_date, today, d.recording_date, d.edit_ready_date].filter(Boolean).sort().pop()
   const payloadOf = () => {
     // A link written in the Reference or Notes line is a reference — the
     // brief's "Example link" — so the full sheet shows it where a crew looks
@@ -347,7 +338,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
       // is born on "To shoot" rather than left at Idea. (The server only
       // moves an idea; a task added in a column stays in it.)
       auto_stage: true,
-      release_date: d.release_date || null,
+      release_date: bornDay(),
       recording_date: d.recording_date || null,
       // The hours were picked on somebody's day. With nobody filming any more
       // they are nobody's hours, and are not sent — the day stays.
@@ -381,15 +372,15 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   const draftOf = () => ({ ...payloadOf(), auto_stage: false,
     edit_ready_date: d.edit_ready_date || null, design_ready_date: d.design_ready_date || null })
   const submit = async (force = false, draft = false) => {
-    if (!d.title.trim()) { go(0); return }
-    if (!d.channel) { setErr(tx('Pick where it goes')); go(1); return }
+    if (!d.channel) { setErr(tx('Pick where it goes')); go(0); return }
+    if (!d.title.trim()) { go(ideaAt); return }
     if (written && !d.telegram_type && !draft) {
       go(steps.length - 1)
       setErr(tx('Pick the Telegram Item Type.'))
       return
     }
     if (needsDescription && !hasSubstance(d.notes)) {
-      go(0)
+      go(ideaAt)
       setErr(tx('This kind of task needs a short description.'))
       return
     }
@@ -415,13 +406,13 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
       onClose()
     } catch (e) {
       // Somebody is already booked then: say so, and let an admin go ahead.
-      if (e.status === 409 && e.data?.conflicts) { setClash({ ...e.data, draft }); goTo('shoot'); return }
+      if (e.status === 409 && e.data?.conflicts) { setClash({ ...e.data, draft }); goTo('plan'); return }
       // Take them to the question the refusal is about — and say it there:
       // going to a step clears the error, so it is set after (the bug hunt,
       // 14 Oct 2026: "Create now" jumped to a step with no message).
       if (e.data?.crew_field) goTo(SEAT_STEP[e.data.crew_field])
       else if (SEAT_STEP[e.data?.field]) goTo(SEAT_STEP[e.data.field])
-      else if (/description/i.test(e.message)) go(0)
+      else if (/description/i.test(e.message)) go(ideaAt)
       else if (e.data?.field === 'telegram_type' || /«/i.test(e.message)) go(steps.length - 1)
       setErr(e.message)
     } finally { setBusy(false) }
@@ -489,7 +480,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
           <Check size={15} /> {busy ? tx('Creating…') : tx('Create task')}
         </button>
       ) : (
-        <button type="button" className="btn btn-primary tb-next" disabled={!d.title.trim()} onClick={next}>
+        <button type="button" className="btn btn-primary tb-next" disabled={key === 'where' ? !d.channel : !d.title.trim()} onClick={next}>
           {steps[at + 1] ? tx('Next: {step}', { step: tx(steps[at + 1].label) }) : tx('Next')} <ArrowRight size={15} />
         </button>
       )}
@@ -514,8 +505,8 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
             {steps.map((s, i) => (
               <li key={s.key}>
                 <button type="button" className={'tb-dot' + (i === at ? ' on' : '') + (i < at ? ' done' : '')}
-                  aria-current={i === at ? 'step' : undefined}
-                  disabled={i > 0 && !d.title.trim()} onClick={() => go(i)}>
+                  aria-current={i === at ? 'step' : undefined} aria-label={tx(s.label)}
+                  disabled={i > ideaAt && !d.title.trim()} onClick={() => go(i)}>
                   <span className="tb-dot-bar" />
                   <span className="tb-dot-label">{tx(s.label)}</span>
                 </button>
@@ -527,10 +518,10 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
             <SlidersHorizontal size={13} /> {tx('All fields')}
           </button>
         </div>
-        {startStage && startStage !== ideaStage && step === 0 && (
+        {startStage && startStage !== ideaStage && step === ideaAt && (
           <div className="tb-restored">{tx('It lands in «{stage}».', { stage: startStage.label })}</div>
         )}
-        {restored && step === 0 && (
+        {restored && step === ideaAt && (
           <div className="tb-restored">
             {tx('Picked up where you left off.')}
             <button type="button" className="tb-link" onClick={startOver}>{tx('Start fresh')}</button>
@@ -538,51 +529,22 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
         )}
         <div className="tb-stage-wrap">
           <div key={key} className={`tb-stage tb-${dir}`}>
-            {key === 'title' && (
+            {key === 'where' && (
+              <StepWhere channels={pickable} value={d.channel}
+                onPick={(k) => {
+                  set({ channel: k, type: defaults.design ? d.type : kindFor(k), operator_id: null, editor_id: null, designer_id: null, face_ids: [] })
+                  setDir('fwd'); setStep(at + 1); setErr('')
+                }} />
+            )}
+            {key === 'idea' && (
               <StepTitle value={d.title} onChange={(v) => set({ title: v })} onNext={next}
-                description={d.notes} onDescription={(v) => set({ notes: v })} required={needsDescription} channels={[d.channel]} />
+                description={d.notes} onDescription={(v) => set({ notes: v })} required={needsDescription} channels={[d.channel]}
+                kinds={skipKind || format === 'text' ? null : { type: d.type, format, onPick: (t) => set({ type: t }) }} />
             )}
-            {key === 'type' && (
-              <StepType type={d.type} channel={d.channel}
-                channels={givenOk ? [] : pickable}
-                onChannel={(k) => set({ channel: k, type: defaults.design ? d.type : kindFor(k), operator_id: null, editor_id: null, designer_id: null, face_ids: [] })}
-                format={format}
-                onPick={(t) => { set({ type: t }); setDir('fwd'); setStep(steps.findIndex((x) => x.key === 'type') + 1); setErr('') }} />
-            )}
-            {key === 'shoot' && (
-              <StepShoot today={today} operators={operators} operatorId={d.operator_id} onOperator={(id) => set({ operator_id: id })}
-                filming={d.recording_date} filmFrom={d.recording_time} filmTo={d.recording_end}
-                onFilm={(slot) => set(slot ? { recording_date: slot.date, recording_time: slot.from, recording_end: slot.to } : { recording_date: '', recording_time: '', recording_end: '' })}
-                onClearFilming={() => set({ recording_date: '', recording_time: '', recording_end: '' })}
-                people={people} faces={d.face_ids} onFaces={(ids) => set({ face_ids: ids })} askFaces={d.type === 'target'}
-                showDue={edit && d.editor_id === d.operator_id} release={d.release_date} />
-            )}
-            {key === 'edit' && (
-              <StepEdit editors={editors} editorId={d.editor_id} onEditor={(id) => set({ editor_id: id })}
-                sameAsShooter={d.editor_id === d.operator_id}
-                cut={cutDay} cutFloor={cutFloor} release={d.release_date} onCut={(v) => set({ edit_ready_date: v })} />
-            )}
-            {key === 'when' && (
-              <StepWhen today={today} release={d.release_date} onRelease={(v) => set({ release_date: v })}
-                filming={d.recording_date}
+            {key === 'plan' && (
+              <StepPlan today={today} d={d} set={set} film={film} edit={edit} design={design}
                 quick={QUICK[format === 'text' ? 'text' : format === 'ads' ? 'ads' : flow === 'filmed' ? 'filmed' : d.type === 'story' ? 'story' : 'post']}
-                owners={owners} owner={d.owner_id} onOwner={(id) => set({ owner_id: id })} />
-            )}
-            {key === 'when' && (canFilm || canEdit || canDesign) && (
-              <div className="tb-adds" role="group" aria-label={tx('Add to it now, or later with Edit')}>
-                <span className="tb-adds-q">{tx('Add to it now, or later with Edit')}</span>
-                {[canFilm && ['shoot', Clapperboard, 'Book a shoot'], canEdit && ['edit', Scissors, 'Name who edits'], canDesign && ['design', Palette, 'Ask for a cover']]
-                  .filter(Boolean).map(([k, I, label]) => (
-                    <button key={k} type="button" className="tb-add" aria-pressed={!!want[k]}
-                      onClick={() => { if (want[k]) set(OFF[k]); setWant((w) => ({ ...w, [k]: !w[k] })) }}>
-                      {want[k] ? <Check size={15} aria-hidden="true" /> : <I size={15} aria-hidden="true" />}{tx(label)}
-                    </button>
-                  ))}
-              </div>
-            )}
-            {key === 'design' && (
-              <StepDesign designers={designers} designerId={d.designer_id} onDesigner={(id) => set({ designer_id: id })}
-                art={artDay} artFloor={today} release={d.release_date} onArt={(v) => set({ design_ready_date: v })} />
+                operators={operators} editors={editors} designers={designers} people={people} owners={owners} />
             )}
             {key === 'more' && (
               <StepMore brief={d} onBrief={set} booking={booking} ask={brief.ask ? tx(brief.ask) : ''} sub={brief.sub ? tx(brief.sub) : ''}

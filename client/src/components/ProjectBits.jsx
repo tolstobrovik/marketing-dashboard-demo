@@ -41,12 +41,12 @@ export function PhotoField({ photo, onChange }) {
   }
   return (
     <div className="field">
-      <label>Cover photo <span className="stat-sub">(optional)</span></label>
+      <label>{tx('Cover photo')} <span className="stat-sub">{tx('(optional)')}</span></label>
       {photo ? (
         <div className="photo-wrap">
-          <img src={photo} alt="cover" />
-          <button type="button" className="photo-remove" data-tip="Remove the photo" data-tip-left=""
-            onClick={() => onChange({ photo: null, photo_thumb: null })} aria-label="Remove photo"><X size={14} /></button>
+          <img src={photo} alt={tx('cover')} />
+          <button type="button" className="photo-remove" data-tip={tx('Remove the photo')} data-tip-left=""
+            onClick={() => onChange({ photo: null, photo_thumb: null })} aria-label={tx('Remove photo')}><X size={14} /></button>
         </div>
       ) : (
         <label className="photo-pick">
@@ -215,7 +215,7 @@ export function PcChecklist({ items, team = [], canEdit, canTick, canEditItems, 
   return (
     <div>
       <div className="pc-check-head">
-        <h3>Checklist</h3>
+        <h3>{tx('Checklist')}</h3>
         <span className="stat-sub">{done} / {items.length} done</span>
       </div>
       {items.length > 0 && <PlainBar pct={(done / Math.max(1, items.length)) * 100} height={8} />}
@@ -252,10 +252,10 @@ export function PcChecklist({ items, team = [], canEdit, canTick, canEditItems, 
                 <select
                   className="select pc-mini"
                   value={c.owner_id ?? ''}
-                  data-tip="Who does this step"
+                  data-tip={tx('Who does this step')}
                   onChange={(e) => set(i, { owner_id: e.target.value === '' ? null : Number(e.target.value) })}
                 >
-                  <option value="">— no owner —</option>
+                  <option value="">{tx('— no owner —')}</option>
                   {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               ) : team.length > 0 ? (
@@ -266,15 +266,15 @@ export function PcChecklist({ items, team = [], canEdit, canTick, canEditItems, 
               {c.done ? (
                 <span className="stat-sub">done {c.done_at ? dateLabel(c.done_at) : ''}</span>
               ) : editItems ? (
-                <input className="input pc-mini" type="date" value={c.due || ''} data-tip="Due date"
+                <input className="input pc-mini" type="date" value={c.due || ''} data-tip={tx('Due date')}
                   style={overdue ? { color: PC.red, fontWeight: 700 } : undefined}
                   onChange={(e) => set(i, { due: e.target.value || null })} />
               ) : (
                 <span className={overdue ? 'pc-red' : 'stat-sub'}>{c.due ? `due ${dateLabel(c.due)}` : '—'}</span>
               )}
               {editItems && (
-                <button type="button" className="icon-btn" style={{ padding: 2 }} data-tip="Remove this step" data-tip-left=""
-                  onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label="Remove">
+                <button type="button" className="icon-btn" style={{ padding: 2 }} data-tip={tx('Remove this step')} data-tip-left=""
+                  onClick={() => onChange(items.filter((_, j) => j !== i))} aria-label={tx('Remove')}>
                   <X size={13} />
                 </button>
               )}
@@ -322,11 +322,11 @@ export function NotesBlock({ notes, onAdd, onDelete, canDelete = () => true }) {
           <span className="pc-note-author">{n.author_name || 'system'}</span>
           <span style={{ flex: 1 }}>{n.text}</span>
           {onDelete && canDelete(n) && (
-            <button type="button" className="icon-btn" style={{ padding: 2 }} data-tip="Delete this note" data-tip-left=""
+            <button type="button" className="icon-btn" style={{ padding: 2 }} data-tip={tx('Delete this note')} data-tip-left=""
               onClick={async () => {
                 if (!confirm('Delete this note?')) return
                 try { await onDelete(n) } catch (e) { alert(e.message) }
-              }} aria-label="Delete note">
+              }} aria-label={tx('Delete note')}>
               <X size={13} />
             </button>
           )}
@@ -350,9 +350,9 @@ export function CampaignRow({ c, byKey, onOpen }) {
         <span className="pc-camp-name">{c.name}</span>
         <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {startsIn != null && startsIn >= 0 ? (
-            <span className="pc-days" data-tip="Days until the start date">starts in {startsIn}d</span>
+            <span className="pc-days" data-tip={tx('Days until the start date')}>starts in {startsIn}d</span>
           ) : c.days_left != null && c.status !== 'done' && c.days_left >= 0 ? (
-            <span className="pc-days" data-tip="Days until the end date">{c.days_left}d left</span>
+            <span className="pc-days" data-tip={tx('Days until the end date')}>{c.days_left}d left</span>
           ) : null}
           <StatusBadge status={c.status} />
         </span>
@@ -362,12 +362,12 @@ export function CampaignRow({ c, byKey, onOpen }) {
       <div className="pc-camp-when">
         {c.start_date && c.end_date
           ? <span>{dateLabel(c.start_date)} → {dateLabel(c.end_date)}</span>
-          : <span className={c.status === 'idea' ? 'stat-sub' : 'pc-red'}>no dates yet</span>}
+          : <span className={c.status === 'idea' ? 'stat-sub' : 'pc-red'}>{tx('no dates yet')}</span>}
       </div>
       <div className="pc-camp-sub">
-        {c.project_name ? <span>{c.project_name}</span> : <span className={c.status === 'idea' ? 'stat-sub' : 'pc-red'}>no project</span>}
+        {c.project_name ? <span>{c.project_name}</span> : <span className={c.status === 'idea' ? 'stat-sub' : 'pc-red'}>{tx('no project')}</span>}
         <span>·</span>
-        {c.owner_name ? <span>{c.owner_name}</span> : <span className={c.status === 'idea' ? 'stat-sub' : 'pc-red'}>no owner</span>}
+        {c.owner_name ? <span>{c.owner_name}</span> : <span className={c.status === 'idea' ? 'stat-sub' : 'pc-red'}>{tx('no owner')}</span>}
       </div>
       {c.description && <div className="pc-desc-clamp">{c.description}</div>}
       {c.channels.length > 0 && (
@@ -589,7 +589,7 @@ export function NumberTable({ numbers = [], team = [], canWrite, onChange, proje
 // somebody had done kept being read as a promise the project had met.
 export function CriteriaList({ criteria = [], canWrite, onChange, big = false }) {
   if (!criteria.length) {
-    return <div className="stat-sub">No criteria yet — add them in the project form.</div>
+    return <div className="stat-sub">{tx('No criteria yet — add them in the project form.')}</div>
   }
   return (
     <div className={'crit-list' + (big ? ' crit-big' : '')}>

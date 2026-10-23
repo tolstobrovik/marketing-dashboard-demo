@@ -165,17 +165,17 @@ function DriveTab() {
               <button className="btn btn-primary btn-sm" onClick={connectNow} disabled={busy}><HardDrive size={14} /> {tx('Connect Google Drive')}</button>
             </div>
             <DropIn st={st} busy={busy} />
-            <div className="stat-sub">Redirect URI on record with Google: <span className="gd-uri">{st.redirect_uri}</span></div>
+            <div className="stat-sub">{tx('Redirect URI on record with Google:')} <span className="gd-uri">{st.redirect_uri}</span></div>
           </>
         ) : (
           <>
-            <div className="gd-state"><HardDrive size={18} /><span>Google Drive isn’t set up on the server yet — five minutes, once:</span></div>
+            <div className="gd-state"><HardDrive size={18} /><span>{tx('Google Drive isn’t set up on the server yet — five minutes, once:')}</span></div>
             <ol className="gd-steps">
-              <li>Signed in as the team’s Google account, open <b>console.cloud.google.com</b> → create a project → <b>APIs &amp; Services → Library</b> → enable <b>Google Drive API</b>.</li>
-              <li><b>OAuth consent screen</b>: External, app name “SATashkent Dashboard”, add the scopes <code>…/auth/drive.file</code> (uploads) and <code>…/auth/drive.readonly</code> (drop-in reads the three drop folders) — then <b>Publish app</b> (left in Testing, the connection expires after 7 days). Publishing asks for the home page <code>https://marketing.satashkent.uz</code> and the privacy policy <code>https://marketing.satashkent.uz/privacy</code>.</li>
-              <li><b>Credentials → Create credentials → OAuth client ID → Web application</b>. Authorized redirect URI: <code>{st.redirect_uri}</code></li>
-              <li>Copy the client ID and secret into the repository secrets <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> (GitHub → Settings → Secrets → Actions), then <b>Actions → deploy → Run workflow</b>.</li>
-              <li>Come back here and press <b>Connect Google Drive</b>.</li>
+              <li>{tx('Signed in as the team’s Google account, open')} <b>{'console.cloud.google.com'}</b> {tx('→ create a project →')} <b>{tx('APIs & Services → Library')}</b> {tx('→ enable')} <b>{'Google Drive API'}</b>.</li>
+              <li><b>{tx('OAuth consent screen')}</b>{tx(': External, app name “SATashkent Dashboard”, add the scopes')} <code>{'…/auth/drive.file'}</code> {tx('(uploads) and')} <code>{'…/auth/drive.readonly'}</code> {tx('(drop-in reads the three drop folders) — then')} <b>{tx('Publish app')}</b> {tx('(left in Testing, the connection expires after 7 days). Publishing asks for the home page')} <code>{'https://marketing.satashkent.uz'}</code> {tx('and the privacy policy')} <code>{'https://marketing.satashkent.uz/privacy'}</code>.</li>
+              <li><b>{tx('Credentials → Create credentials → OAuth client ID → Web application')}</b>. Authorized redirect URI: <code>{st.redirect_uri}</code></li>
+              <li>{tx('Copy the client ID and secret into the repository secrets')} <code>{'GOOGLE_CLIENT_ID'}</code> {tx('and')} <code>{'GOOGLE_CLIENT_SECRET'}</code> {tx('(GitHub → Settings → Secrets → Actions), then')} <b>{'Actions → deploy → Run workflow'}</b>.</li>
+              <li>{tx('Come back here and press')} <b>{tx('Connect Google Drive')}</b>.</li>
             </ol>
           </>
         )}
@@ -202,15 +202,15 @@ function DropIn({ st, busy, onConnect }) {
   return (
     <div className="co-dropin">
       <h3>{tx('Drop-in from Google Drive')}</h3>
-      <p className="stat-sub">{tx('Files dropped into three folders in this Drive find their task by name (“Copy file name” in every task) and show up on it within two minutes. Files nobody can match wait under More → Unmatched files.')}</p>
+      <p className="stat-sub">{tx('Files dropped into three folders in this Drive find their task by name (“Copy file name” in every task) and show up on it within two minutes. Files nobody can match wait under More → Lost files.')}</p>
       {drop.on ? (
         <>
           <div className="gd-state on"><CheckCircle2 size={18} /><span>{tx('Drop-in is on.')}</span></div>
           {f && (
             <div className="gd-row">
-              <a className="btn btn-sm" href={f.recording.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Recording</a>
-              <a className="btn btn-sm" href={f.pravka.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Pravka</a>
-              <a className="btn btn-sm" href={f.ready.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Ready</a>
+              <a className="btn btn-sm" href={f.recording.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {tx('Recording')}</a>
+              <a className="btn btn-sm" href={f.pravka.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {tx('Pravka')}</a>
+              <a className="btn btn-sm" href={f.ready.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {tx('Ready')}</a>
             </div>
           )}
           <p className="stat-sub">{tx('The crew need edit access to the parent folder “SATashkent Marketing drop” to drop files: share it with them once, in Google Drive.')}{f?.parent?.url && <> <a href={f.parent.url} target="_blank" rel="noreferrer">{tx('Open the parent folder')}</a></>}</p>
@@ -270,25 +270,25 @@ function TelegramTab() {
       setCast('')
     } catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
-  if (!st) return <div className="card card-pad"><div className="stat-sub">Checking the bridge…</div></div>
+  if (!st) return <div className="card card-pad"><div className="stat-sub">{tx('Checking the bridge…')}</div></div>
   const linked = st.members.filter((m) => m.linked)
   return (
     <>
-      <div className="section-head"><h2>The bridge</h2></div>
+      <div className="section-head"><h2>{tx('The bridge')}</h2></div>
       <div className="card card-pad">
         {!st.enabled ? (
           <div className="stat-sub">
-            The bot isn’t configured. Put the @BotFather token into the repository secret <b>TELEGRAM_BOT_TOKEN</b>, redeploy — then press Activate here.
+            {tx('The bot isn’t configured. Put the @BotFather token into the repository secret')} <b>{'TELEGRAM_BOT_TOKEN'}</b>{tx(', redeploy — then press Activate here.')}
           </div>
         ) : (
           <>
             <div className="stat-sub" style={{ marginBottom: 8 }}>
               Bot: <b>{st.bot ? `@${st.bot}` : '—'}</b>
-              {' · '}Webhook: {st.webhook?.url ? <b>{st.webhook.url}</b> : <b>not set</b>}
+              {' · '}Webhook: {st.webhook?.url ? <b>{st.webhook.url}</b> : <b>{tx('not set')}</b>}
               {st.webhook?.last_error_message ? <> · <span style={{ color: 'var(--critical)' }}>last error: {st.webhook.last_error_message}</span></> : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button className="btn btn-primary btn-sm" onClick={activate} disabled={busy}>Activate webhook</button>
+              <button className="btn btn-primary btn-sm" onClick={activate} disabled={busy}>{tx('Activate webhook')}</button>
               <span className="stat-sub">Once after the token lands or the domain changes{st.public_url ? <> · task links point to <b>{st.public_url}</b></> : null}.</span>
             </div>
           </>
@@ -296,7 +296,7 @@ function TelegramTab() {
         {msg && <div className="stat-sub" style={{ marginTop: 8 }}>{msg}</div>}
       </div>
 
-      <div className="section-head" style={{ marginTop: 18 }}><h2>Connected</h2><span className="count">· {linked.length} of {st.members.length}</span></div>
+      <div className="section-head" style={{ marginTop: 18 }}><h2>{tx('Connected')}</h2><span className="count">· {linked.length} of {st.members.length}</span></div>
       <div className="card" style={{ padding: '4px 14px' }}>
         {st.members.map((m) => (
           <div key={m.id} className="alog-row">
@@ -304,8 +304,8 @@ function TelegramTab() {
             <span className="stat-sub">@{m.username}{m.role === 'admin' ? ' · admin' : ''}</span>
             <span style={{ flex: 1 }} />
             {m.linked
-              ? <><span className="save-ok"><Check size={14} /> connected</span>
-                <button className="btn btn-sm" onClick={() => unlink(m)}>Unlink</button></>
+              ? <><span className="save-ok"><Check size={14} /> {tx('connected')}</span>
+                <button className="btn btn-sm" onClick={() => unlink(m)}>{tx('Unlink')}</button></>
               : <span className="stat-sub">—</span>}
           </div>
         ))}
@@ -313,11 +313,11 @@ function TelegramTab() {
 
       {st.enabled && (
         <>
-          <div className="section-head" style={{ marginTop: 18 }}><h2>Broadcast</h2></div>
+          <div className="section-head" style={{ marginTop: 18 }}><h2>{tx('Broadcast')}</h2></div>
           <div className="card card-pad">
-            <div className="stat-sub" style={{ marginBottom: 8 }}>One announcement to everyone connected — planning changes, «планёрка в 15:00».</div>
+            <div className="stat-sub" style={{ marginBottom: 8 }}>{tx('One announcement to everyone connected — planning changes, «планёрка в 15:00».')}</div>
             <div className="add-inline">
-              <input className="input" value={cast} placeholder="Write the announcement…"
+              <input className="input" value={cast} placeholder={tx('Write the announcement…')}
                 onChange={(e) => setCast(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); broadcast() } }} />
               <button className="btn btn-primary btn-sm" onClick={broadcast} disabled={busy || !cast.trim() || linked.length === 0}>
@@ -380,13 +380,13 @@ function Reminders({ members }) {
   return (
     <>
       <div className="section-head" style={{ marginTop: 18 }}>
-        <h2>Reminders</h2>
-        <span className="count">· send on the spot, or let them arrive on their own</span>
+        <h2>{tx('Reminders')}</h2>
+        <span className="count">{tx('· send on the spot, or let them arrive on their own')}</span>
         <span className="spacer" />
-        <button className="btn btn-sm" onClick={() => setEdit({ ...BLANK })}><Plus size={14} /> New reminder</button>
+        <button className="btn btn-sm" onClick={() => setEdit({ ...BLANK })}><Plus size={14} /> {tx('New reminder')}</button>
       </div>
       <div className="card" style={{ padding: '4px 14px' }}>
-        {list.length === 0 && <div className="stat-sub" style={{ padding: '10px 0' }}>No reminders yet.</div>}
+        {list.length === 0 && <div className="stat-sub" style={{ padding: '10px 0' }}>{tx('No reminders yet.')}</div>}
         {list.map((t) => (
           <div key={t.id} className="rem-row">
             <button className={'side-eye' + (t.enabled ? '' : ' off')} onClick={() => toggle(t)}
@@ -405,9 +405,9 @@ function Reminders({ members }) {
               </span>
             </span>
             <button className="btn btn-sm" onClick={() => setPicking({ tpl: t, ids: linked.map((m) => m.id) })}
-              disabled={busy || linked.length === 0}><Send size={13} /> Send</button>
+              disabled={busy || linked.length === 0}><Send size={13} /> {tx('Send')}</button>
             <button className="btn btn-sm" onClick={() => setEdit({ ...t })}>Edit</button>
-            <button className="icon-btn" onClick={() => remove(t)} aria-label="Delete reminder"><Trash2 size={14} /></button>
+            <button className="icon-btn" onClick={() => remove(t)} aria-label={tx('Delete reminder')}><Trash2 size={14} /></button>
           </div>
         ))}
       </div>
@@ -415,29 +415,29 @@ function Reminders({ members }) {
       {edit && (
         <Modal title={edit.id ? 'Edit reminder' : 'New reminder'} onClose={() => setEdit(null)}
           footer={<>
-            <button className="btn" onClick={() => setEdit(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={save} disabled={busy || !edit.title.trim() || !edit.text.trim()}>Save</button>
+            <button className="btn" onClick={() => setEdit(null)}>{tx('Cancel')}</button>
+            <button className="btn btn-primary" onClick={save} disabled={busy || !edit.title.trim() || !edit.text.trim()}>{tx('Save')}</button>
           </>}>
-          <div className="field"><label>Name — for you, not for them</label>
-            <input className="input" autoFocus value={edit.title} placeholder="e.g. Is the week planned?"
+          <div className="field"><label>{tx('Name — for you, not for them')}</label>
+            <input className="input" autoFocus value={edit.title} placeholder={tx('e.g. Is the week planned?')}
               onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
           </div>
-          <div className="field"><label>The message</label>
+          <div className="field"><label>{tx('The message')}</label>
             <textarea className="input" rows={5} value={edit.text}
-              placeholder="Write it the way you would say it — warm, short, and ending in one clear action."
+              placeholder={tx('Write it the way you would say it — warm, short, and ending in one clear action.')}
               onChange={(e) => setEdit({ ...edit, text: e.target.value })} />
           </div>
-          <div className="field"><label>Who hears it</label>
+          <div className="field"><label>{tx('Who hears it')}</label>
             <select className="select" value={edit.audience} onChange={(e) => setEdit({ ...edit, audience: e.target.value })}>
-              <option value="linked">Everyone connected</option>
-              <option value="role:member">Members</option>
-              <option value="role:editor">Editors</option>
-              <option value="role:operator">Operators</option>
-              <option value="role:designer">Designers</option>
-              <option value="role:admin">Admins</option>
+              <option value="linked">{tx('Everyone connected')}</option>
+              <option value="role:member">{tx('Members')}</option>
+              <option value="role:editor">{tx('Editors')}</option>
+              <option value="role:operator">{tx('Operators')}</option>
+              <option value="role:designer">{tx('Designers')}</option>
+              <option value="role:admin">{tx('Admins')}</option>
             </select>
           </div>
-          <div className="field"><label>When it arrives by itself</label>
+          <div className="field"><label>{tx('When it arrives by itself')}</label>
             <div className="pill-group" style={{ flexWrap: 'wrap' }}>
               {WEEK.map((w) => (
                 <button key={w.d} type="button"
@@ -448,7 +448,7 @@ function Reminders({ members }) {
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <span className="stat-sub">at</span>
+              <span className="stat-sub">{tx('at')}</span>
               <select className="select" style={{ maxWidth: 110 }} value={edit.hour}
                 onChange={(e) => setEdit({ ...edit, hour: Number(e.target.value) })}>
                 {[...Array(24)].map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
@@ -462,14 +462,14 @@ function Reminders({ members }) {
       {picking && (
         <Modal title={`Send “${picking.tpl.title}”`} onClose={() => setPicking(null)}
           footer={<>
-            <button className="btn" onClick={() => setPicking(null)}>Cancel</button>
+            <button className="btn" onClick={() => setPicking(null)}>{tx('Cancel')}</button>
             <button className="btn btn-primary" disabled={busy || picking.ids.length === 0}
               onClick={() => sendNow(picking.tpl, picking.ids)}>
               <Send size={14} /> Send to {picking.ids.length}
             </button>
           </>}>
           <div className="stat-sub" style={{ whiteSpace: 'pre-wrap', marginBottom: 10 }}>{picking.tpl.text}</div>
-          <div className="field"><label>Who gets it now</label>
+          <div className="field"><label>{tx('Who gets it now')}</label>
             <div className="checkbox-row">
               {linked.map((m) => (
                 <label key={m.id} className={'checkbox-chip chip-sm' + (picking.ids.includes(m.id) ? ' on' : '')}>
@@ -482,7 +482,7 @@ function Reminders({ members }) {
                 </label>
               ))}
             </div>
-            {linked.length === 0 && <div className="stat-sub">Nobody has connected Telegram yet.</div>}
+            {linked.length === 0 && <div className="stat-sub">{tx('Nobody has connected Telegram yet.')}</div>}
           </div>
         </Modal>
       )}
@@ -510,10 +510,10 @@ function HistoryTab() {
   return (
     <>
       <div className="section-head">
-        <h2>History</h2><span className="count">· {shown.length}</span>
+        <h2>{tx('History')}</h2><span className="count">· {shown.length}</span>
         <span style={{ flex: 1 }} />
-        <select className="select" value={who} onChange={(e) => setWho(e.target.value)} aria-label="Filter by person">
-          <option value="all">Everyone</option>
+        <select className="select" value={who} onChange={(e) => setWho(e.target.value)} aria-label={tx('Filter by person')}>
+          <option value="all">{tx('Everyone')}</option>
           {people.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
@@ -684,13 +684,13 @@ function TaskRow({ item, ctx }) {
         { sep: true },
         { label: 'Delete', icon: Trash2, danger: true, onClick: () => removeTask(item) },
       ])}>
-      <button className={`todo-check${isDone ? ' on' : ''}`} onClick={() => toggle(item)} data-tip={isDone ? 'Mark as not done' : 'Mark as done'} aria-label="Complete">
+      <button className={`todo-check${isDone ? ' on' : ''}`} onClick={() => toggle(item)} data-tip={isDone ? 'Mark as not done' : 'Mark as done'} aria-label={tx('Complete')}>
         {isDone && <Check size={15} strokeWidth={3.5} />}
       </button>
-      <button className="todo-main" onClick={() => setOpenItem(item)} data-tip="Open the task">
+      <button className="todo-main" onClick={() => setOpenItem(item)} data-tip={tx('Open the task')}>
         <span className={`todo-title${isDone ? ' done-txt' : ''}`}>{item.title}</span>
         <span className="todo-meta">
-          {!!item.pinned && !isDone && <span className="chip chip-pin"><Pin size={10} /> Pinned</span>}
+          {!!item.pinned && !isDone && <span className="chip chip-pin"><Pin size={10} /> {tx('Pinned')}</span>}
           <span className={`chip ct-${item.type}`}>{typeInfo(item.type).label}</span>
           {item.channels.map((c) => <span key={c} className="chip chip-muted">{byKey[c]?.label || c}</span>)}
           {status && !isDone && <StageDot status={status} />}
@@ -713,11 +713,11 @@ function TaskRow({ item, ctx }) {
       <span className="todo-actions">
         {!isDone && (
           <button className={'icon-btn pin-btn' + (item.pinned ? ' on' : '')} onClick={() => togglePin(item)}
-            data-tip={item.pinned ? 'Unpin' : 'Pin to the top for everyone'} data-tip-left="" aria-label="Pin">
+            data-tip={item.pinned ? 'Unpin' : 'Pin to the top for everyone'} data-tip-left="" aria-label={tx('Pin')}>
             <Pin size={14} />
           </button>
         )}
-        <button className="icon-btn del-btn" onClick={() => removeTask(item)} data-tip="Delete this task" data-tip-left="" aria-label="Delete task">
+        <button className="icon-btn del-btn" onClick={() => removeTask(item)} data-tip={tx('Delete this task')} data-tip-left="" aria-label={tx('Delete task')}>
           <Trash2 size={14} />
         </button>
       </span>
@@ -799,10 +799,10 @@ function TasksTab() {
           <button key={c.key} className={'pill' + (chan === c.key ? ' active' : '')} onClick={() => setChan(c.key)}>{c.label}</button>
         ))}
         <span style={{ flex: 1 }} />
-        <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}><Plus size={15} /> New task</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}><Plus size={15} /> {tx('New task')}</button>
       </div>
 
-      <div className="section-head"><h2>Open</h2><span className="count">· {open.length}</span></div>
+      <div className="section-head"><h2>{tx('Open')}</h2><span className="count">· {open.length}</span></div>
       <div className="card" style={{ padding: '4px 14px' }}>
         {open.map((i) => <TaskRow key={i.id} item={i} ctx={rowCtx} />)}
         {open.length === 0 && <div className="empty">{tx('Nothing open')}</div>}
@@ -810,7 +810,7 @@ function TasksTab() {
 
       {done.length > 0 && (
         <>
-          <div className="section-head"><h2>Completed</h2><span className="count">· {done.length}</span></div>
+          <div className="section-head"><h2>{tx('Completed')}</h2><span className="count">· {done.length}</span></div>
           <div className="card" style={{ padding: '4px 14px' }}>
             {done.map((i) => <TaskRow key={i.id} item={i} ctx={rowCtx} />)}
           </div>
@@ -920,14 +920,14 @@ function TeamTab() {
   return (
     <>
       <div className="section-head">
-        <h2>Team members</h2>
+        <h2>{tx('Team members')}</h2>
         <span className="count">· {users.length}</span>
         <span className="spacer" />
         <button className="btn btn-primary btn-sm" onClick={openAdd}><Plus size={15} /> {tx('Add member')}</button>
       </div>
       <div className="card table-wrap">
         <table className="tbl">
-          <thead><tr><th>Member</th><th>Role</th><th>Channels</th><th>Permissions</th><th>{tx('Sprint owner')}</th>
+          <thead><tr><th>{tx('Member')}</th><th>{tx('Role')}</th><th>{tx('Channels')}</th><th>{tx('Permissions')}</th><th>{tx('Sprint owner')}</th>
                   <th style={{ textAlign: 'right' }} /></tr></thead>
           <tbody>
             {users.map((u) => (
@@ -944,7 +944,7 @@ function TeamTab() {
                 <td>
                   {u.role === 'admin' ? <span className="badge"><ShieldCheck size={12} /> {(u.admin_channels || []).length ? 'Channel admin' : 'Admin'}</span>
                     : (u.crew_roles || []).length > 0 ? <span className="badge badge-muted"><Video size={12} /> {(u.crew_roles || []).map((c) => c[0].toUpperCase() + c.slice(1)).join(' & ')}</span>
-                    : <span className="badge badge-muted">Member</span>}
+                    : <span className="badge badge-muted">{tx('Member')}</span>}
                 </td>
                 <td>
                   <div className="dept-chips">
@@ -956,7 +956,7 @@ function TeamTab() {
                         })
                         : <span className="stat-sub">{tx('All channels')}</span>)
                       : (u.crew_roles || []).length > 0
-                        ? <span className="stat-sub">Their work, any channel</span>
+                        ? <span className="stat-sub">{tx('Their work, any channel')}</span>
                         : u.departments.map((d) => {
                             const c = channels.find((x) => x.key === d)
                             return <span key={d} className="badge badge-muted">{c?.label || d}</span>
@@ -965,9 +965,9 @@ function TeamTab() {
                 </td>
                 <td>
                   {u.role === 'admin'
-                    ? <span className="stat-sub">Everything</span>
+                    ? <span className="stat-sub">{tx('Everything')}</span>
                     : (u.crew_roles || []).length > 0
-                      ? <span className="stat-sub">Move own work</span>
+                      ? <span className="stat-sub">{tx('Move own work')}</span>
                       : <span className="stat-sub">{PERMISSIONS.filter((p) => u.permissions[p.key]).length}/{PERMISSIONS.length} enabled</span>}
                 </td>
                 <td>
@@ -982,12 +982,12 @@ function TeamTab() {
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                    <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(u)} data-tip="Edit member, channels & rights" aria-label="Edit"><Pencil size={15} /></button>
+                    <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(u)} data-tip={tx('Edit member, channels & rights')} aria-label="Edit"><Pencil size={15} /></button>
                     {/* Deleting somebody's account had exactly the weight of
                         editing it: two buttons side by side, one of them red,
                         on every row of a long table. It is still one press
                         away — on the row you are actually pointing at. */}
-                    <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(u)} data-tip="Remove this member" data-tip-left="" aria-label="Delete"><Trash2 size={15} /></button>
+                    <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(u)} data-tip={tx('Remove this member')} data-tip-left="" aria-label={tx('Delete')}><Trash2 size={15} /></button>
                   </div>
                 </td>
               </tr>
@@ -1001,32 +1001,32 @@ function TeamTab() {
           title={editing ? tx('Edit member') : tx('Add member')}
           onClose={() => setModal(false)}
           footer={<>
-            <button className="btn" onClick={() => setModal(false)}>Cancel</button>
+            <button className="btn" onClick={() => setModal(false)}>{tx('Cancel')}</button>
             <button className="btn btn-primary" onClick={save} disabled={busy}>{editing ? 'Save changes' : 'Create member'}</button>
           </>}
         >
           {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-          <div className="field"><label>Name</label>
-            <input className="input" value={form.name} autoFocus placeholder="e.g. Dilnoza Karimova"
+          <div className="field"><label>{tx('Name')}</label>
+            <input className="input" value={form.name} autoFocus placeholder={tx('e.g. Dilnoza Karimova')}
               onChange={(e) => {
                 const name = e.target.value
                 setForm((f) => ({ ...f, name, username: usernameTouched ? f.username : slug(name) }))
               }} />
           </div>
-          <div className="field"><label>Username <span style={{ color: 'var(--muted)', fontWeight: 400 }}>— used to sign in</span></label>
-            <input className="input" type="text" autoCapitalize="none" autoCorrect="off" value={form.username} placeholder="dilnoza"
+          <div className="field"><label>{tx('Username')} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{tx('— used to sign in')}</span></label>
+            <input className="input" type="text" autoCapitalize="none" autoCorrect="off" value={form.username} placeholder={'dilnoza'}
               onChange={(e) => { setUsernameTouched(true); setForm({ ...form, username: e.target.value }) }} />
           </div>
           <div className="field"><label>{editing ? 'New password (leave blank to keep)' : 'Password'}</label>
-            <input className="input" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Set a password" />
+            <input className="input" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={tx('Set a password')} />
           </div>
-          <div className="field"><label>Role</label>
+          <div className="field"><label>{tx('Role')}</label>
             <RolePicker role={form.role} crewRoles={form.crew_roles}
               onChange={(role, crew_roles) => setForm({ ...form, role, crew_roles })} />
           </div>
           {form.role === 'admin' && (
             <div className="field">
-              <label>Which channels do they run?</label>
+              <label>{tx('Which channels do they run?')}</label>
               <div className="checkbox-row">
                 {channels.map((c) => (
                   <label key={c.key} className={'checkbox-chip' + ((form.admin_channels || []).includes(c.key) ? ' on' : '')}>
@@ -1044,7 +1044,7 @@ function TeamTab() {
           )}
           {form.role === 'member' && (
             <>
-              <div className="field"><label>Channels</label>
+              <div className="field"><label>{tx('Channels')}</label>
                 <div className="checkbox-row">
                   {channels.map((c) => (
                     <label key={c.key} className={'checkbox-chip' + (form.departments.includes(c.key) ? ' on' : '')}>
@@ -1054,7 +1054,7 @@ function TeamTab() {
                   ))}
                 </div>
               </div>
-              <div className="field"><label>Permissions</label>
+              <div className="field"><label>{tx('Permissions')}</label>
                 <div className="perm-list">
                   {PERMISSIONS.map((p) => (
                     <button key={p.key} type="button" className={'perm-row' + (form.permissions[p.key] ? ' on' : '')} onClick={() => togglePerm(p.key)}>
@@ -1069,11 +1069,11 @@ function TeamTab() {
               </div>
             </>
           )}
-          {form.role === 'admin' && <span className="stat-sub">Admins can access every channel and do everything.</span>}
+          {form.role === 'admin' && <span className="stat-sub">{tx('Admins can access every channel and do everything.')}</span>}
           {!['member', 'admin'].includes(form.role) && (
             <>
               <div className="field">
-                <label>Which channels do they work on?</label>
+                <label>{tx('Which channels do they work on?')}</label>
                 <div className="checkbox-row">
                   {channels.map((c) => (
                     <label key={c.key} className={'checkbox-chip' + ((form.crew_channels || []).includes(c.key) ? ' on' : '')}>
@@ -1089,7 +1089,7 @@ function TeamTab() {
                 </div>
               </div>
               <div className="field">
-                <label>How many pieces a day?</label>
+                <label>{tx('How many pieces a day?')}</label>
                 <input className="input" type="number" min="0" max="50" style={{ maxWidth: 120 }}
                   value={form.daily_cap ?? 0}
                   onChange={(e) => setForm({ ...form, daily_cap: e.target.value })} />
@@ -1379,8 +1379,8 @@ function PayTab() {
   return (
     <>
       <div className="section-head">
-        <h2>Pay</h2>
-        <span className="count">· worked out from what was delivered</span>
+        <h2>{tx('Pay')}</h2>
+        <span className="count">{tx('· worked out from what was delivered')}</span>
         <span className="spacer" />
         <button className="btn btn-sm" onClick={() => openCard('default', 'everybody')}>
           <Wallet size={14} /> {tx('Default rates')}
@@ -1424,13 +1424,11 @@ function PayTab() {
         <>
           {!data.hasDefault && (
             <div className="card card-pad pay-empty">
-              <b>No rates set yet.</b>
+              <b>{tx('No rates set yet.')}</b>
               <span className="stat-sub">
-                Nothing here is guessed. Set the default card — a base, and what a shoot, an edit and a
-                design are each worth — and every person is worked out from it. Anybody paid differently
-                gets a card of their own on their row.
+                {tx('Nothing here is guessed. Set the default card — a base, and what a shoot, an edit and a design are each worth — and every person is worked out from it. Anybody paid differently gets a card of their own on their row.')}
               </span>
-              <button className="btn btn-primary btn-sm" onClick={() => openCard('default', 'everybody')}>Set the default rates</button>
+              <button className="btn btn-primary btn-sm" onClick={() => openCard('default', 'everybody')}>{tx('Set the default rates')}</button>
             </div>
           )}
 
@@ -1664,11 +1662,11 @@ function PayTab() {
           onClose={() => setCard(null)}
           footer={<>
             {card.userId !== 'default' && card.own && (
-              <button className="btn" onClick={dropCard} disabled={busy}><RotateCcw size={14} /> Use the default</button>
+              <button className="btn" onClick={dropCard} disabled={busy}><RotateCcw size={14} /> {tx('Use the default')}</button>
             )}
             <span className="foot-gap" />
-            <button className="btn" onClick={() => setCard(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={saveCard} disabled={busy}>Save rates</button>
+            <button className="btn" onClick={() => setCard(null)}>{tx('Cancel')}</button>
+            <button className="btn btn-primary" onClick={saveCard} disabled={busy}>{tx('Save rates')}</button>
           </>}
         >
           {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
@@ -1687,7 +1685,7 @@ function PayTab() {
                     ? tx('{name} is paid on the {role} card. Change anything here and they get a card of their own, which stops following it.', { name: card.name, role: tx(ROLE_WORD[card.role] || card.role || '') })
                     : tx('{name} is on the default rates. Change anything here and they get a card of their own.', { name: card.name })}
           </div>
-          <div className="field"><label>Currency</label>
+          <div className="field"><label>{tx('Currency')}</label>
             <input className="input" style={{ maxWidth: 120 }} value={card.form.currency || ''}
               onChange={(e) => setCard({ ...card, form: { ...card.form, currency: e.target.value } })} />
           </div>
@@ -1740,7 +1738,7 @@ function PayTab() {
               </div>
               <div className="pay-plan-row">
                 <label>
-                  <span>Job</span>
+                  <span>{tx('Job')}</span>
                   <select className="select" value={plan.job}
                     onChange={(e) => {
                       const j = JOBS.find((x) => x.key === e.target.value)
@@ -1750,18 +1748,18 @@ function PayTab() {
                   </select>
                 </label>
                 <label>
-                  <span>A full month is worth</span>
+                  <span>{tx('A full month is worth')}</span>
                   <input className="input" type="number" min="0" step="100000" value={plan.monthly}
                     onChange={(e) => setPlan({ ...plan, monthly: e.target.value })} />
                 </label>
                 <label>
-                  <span>…and is about</span>
+                  <span>{tx('…and is about')}</span>
                   <input className="input" type="number" min="1" step="1" value={plan.quota}
                     onChange={(e) => setPlan({ ...plan, quota: e.target.value })} />
                 </label>
               </div>
               <div className="pay-plan-do">
-                <button type="button" className="btn btn-sm" onClick={() => setPlan(null)}>Never mind</button>
+                <button type="button" className="btn btn-sm" onClick={() => setPlan(null)}>{tx('Never mind')}</button>
                 <button type="button" className="btn btn-sm btn-primary"
                   onClick={() => {
                     const j = JOBS.find((x) => x.key === plan.job)
@@ -2046,10 +2044,10 @@ function ChannelsTab({ onOpenReport }) {
   return (
     <>
       <div className="section-head">
-        <h2>Sidebar channels</h2>
-        <span className="count">· shown top to bottom</span>
+        <h2>{tx('Sidebar channels')}</h2>
+        <span className="count">{tx('· shown top to bottom')}</span>
         <span className="spacer" />
-        <button className="btn btn-primary btn-sm" onClick={() => { setModal({ label: '', icon: 'instagram', head_id: null, drive_url: '', daily_ad_cap: 0, format: 'social' }); setErr('') }}><Plus size={15} /> Add channel</button>
+        <button className="btn btn-primary btn-sm" onClick={() => { setModal({ label: '', icon: 'instagram', head_id: null, drive_url: '', daily_ad_cap: 0, format: 'social' }); setErr('') }}><Plus size={15} /> {tx('Add channel')}</button>
       </div>
       <div className="card" style={{ padding: '6px 14px' }}>
         {channels.map((c, i) => {
@@ -2073,24 +2071,24 @@ function ChannelsTab({ onOpenReport }) {
                   {c.head_name}
                 </span>
               ) : (
-                <span className="no-owner-badge" data-tip="Nobody owns this channel — assign a head">no owner</span>
+                <span className="no-owner-badge" data-tip={tx('Nobody owns this channel — assign a head')}>{tx('no owner')}</span>
               )}
               {(() => {
                 const st = statsFor(c.key)
                 return (
                   <span className="chan-stats">
                     <Dots late={st.overdue} open={st.open} done={st.done} />
-                    <button className="btn btn-ghost btn-sm" onClick={() => onOpenReport(c.key)} data-tip="This channel's full report">
+                    <button className="btn btn-ghost btn-sm" onClick={() => onOpenReport(c.key)} data-tip={tx("This channel's full report")}>
                       Report →
                     </button>
                   </span>
                 )
               })()}
               <span className="spacer" style={{ flex: 1 }} />
-              <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} data-tip="Move up in the sidebar" aria-label="Up"><ArrowUp size={15} /></button>
-              <button className="icon-btn" disabled={i === channels.length - 1} onClick={() => move(i, 1)} data-tip="Move down in the sidebar" aria-label="Down"><ArrowDown size={15} /></button>
-              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setModal({ id: c.id, label: c.label, icon: c.icon, head_id: c.head_id ?? null, drive_url: c.drive_url || '', daily_ad_cap: c.daily_ad_cap || 0, format: c.format || 'social', video: !!c.video }); setErr('') }} data-tip="Edit this channel" aria-label="Edit"><Pencil size={15} /></button>
-              <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(c)} data-tip="Delete channel & its data" data-tip-left="" aria-label="Delete"><Trash2 size={15} /></button>
+              <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} data-tip={tx('Move up in the sidebar')} aria-label={tx('Up')}><ArrowUp size={15} /></button>
+              <button className="icon-btn" disabled={i === channels.length - 1} onClick={() => move(i, 1)} data-tip={tx('Move down in the sidebar')} aria-label={tx('Down')}><ArrowDown size={15} /></button>
+              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setModal({ id: c.id, label: c.label, icon: c.icon, head_id: c.head_id ?? null, drive_url: c.drive_url || '', daily_ad_cap: c.daily_ad_cap || 0, format: c.format || 'social', video: !!c.video }); setErr('') }} data-tip={tx('Edit this channel')} aria-label="Edit"><Pencil size={15} /></button>
+              <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(c)} data-tip={tx('Delete channel & its data')} data-tip-left="" aria-label={tx('Delete')}><Trash2 size={15} /></button>
             </div>
           )
         })}
@@ -2101,13 +2099,13 @@ function ChannelsTab({ onOpenReport }) {
           title={modal.id ? 'Edit channel' : 'New channel'}
           onClose={() => setModal(null)}
           footer={<>
-            <button className="btn" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn" onClick={() => setModal(null)}>{tx('Cancel')}</button>
             <button className="btn btn-primary" onClick={save} disabled={!modal.label.trim()}>{modal.id ? 'Save' : 'Add'}</button>
           </>}
         >
           {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-          <div className="field"><label>Name</label>
-            <input className="input" autoFocus value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} placeholder="e.g. Instagram Kids" />
+          <div className="field"><label>{tx('Name')}</label>
+            <input className="input" autoFocus value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} placeholder={tx('e.g. Instagram Kids')} />
           </div>
           {/* WHAT KIND OF SURFACE THIS IS.
               It decides what a task going here is asked for, which is the
@@ -2147,16 +2145,16 @@ function ChannelsTab({ onOpenReport }) {
               ? tx('A video here gets two ticks, TikTok and Shorts. Ticked, publishing it gives somebody a task to post it there too.')
               : tx('Off: a video here goes out on this channel only.')}</div>
           </div>
-          <div className="field"><label>Head of department <span className="stat-sub">(shown on the channel page)</span></label>
+          <div className="field"><label>{tx('Head of department')} <span className="stat-sub">{tx('(shown on the channel page)')}</span></label>
             <select className="select" value={modal.head_id ?? ''} onChange={(e) => setModal({ ...modal, head_id: e.target.value === '' ? null : Number(e.target.value) })}>
-              <option value="">— No head yet —</option>
+              <option value="">{tx('— No head yet —')}</option>
               {team.map((u) => <option key={u.id} value={u.id}>{u.name}{u.role === 'admin' ? ' (admin)' : ''}</option>)}
             </select>
           </div>
-          <div className="field"><label>Shared Drive folder <span className="stat-sub">(optional)</span></label>
+          <div className="field"><label>{tx('Shared Drive folder')} <span className="stat-sub">{tx('(optional)')}</span></label>
             <input className="input" value={modal.drive_url ?? ''}
               onChange={(e) => setModal({ ...modal, drive_url: e.target.value })}
-              placeholder="https://drive.google.com/drive/folders/…" />
+              placeholder={'https://drive.google.com/drive/folders/…'} />
             <div className="cm-hint">
               {modal.drive_url
                 ? 'Set. The crew now name the file — “1-3”, “reel 14” — instead of pasting this address on every task. Naming one is still required.'
@@ -2176,7 +2174,7 @@ function ChannelsTab({ onOpenReport }) {
                 : 'No limit, which is what every channel was before this existed. Set a number and a day that is already full refuses the next ad instead of quietly running it.'}
             </div>
           </div>
-          <div className="field"><label>Icon</label>
+          <div className="field"><label>{tx('Icon')}</label>
             <div className="icon-grid">
               {Object.entries(CHANNEL_ICONS).map(([name, Icon]) => (
                 <button key={name} type="button" className={'icon-cell' + (modal.icon === name ? ' on' : '')} onClick={() => setModal({ ...modal, icon: name })} data-tip={name} aria-label={name}>
@@ -2229,7 +2227,7 @@ const PAGE_DEFS = [
   { key: 'docs', label: 'Documents', hint: 'the shelf of SOPs and papers' },
   { key: 'sprints', label: 'Sprints', hint: 'the weekly board and its backlog' },
   { key: 'projects', label: 'Projects', hint: 'projects and the campaigns under them' },
-  { key: 'crew', label: 'Post Production', hint: 'the editors’ and designers’ desk' },
+  { key: 'crew', label: 'Crew', hint: 'the editors’ and designers’ desk' },
   { key: 'team', label: 'Team & hiring', hint: 'the team, candidates and vacancies' },
 ]
 
@@ -2446,13 +2444,13 @@ function SettingsTab() {
       {fields && (
         <>
           <div className="section-head" style={{ marginTop: 18 }}>
-            <h2>The task form</h2>
-            <span className="count">· which brief fields a task carries — and which are demanded</span>
+            <h2>{tx('The task form')}</h2>
+            <span className="count">{tx('· which brief fields a task carries — and which are demanded')}</span>
           </div>
           <div className="card table-wrap">
             <table className="tbl fields-tbl">
               <thead>
-                <tr><th>Field</th><th>Rule</th><th>Applies to</th><th>Options</th></tr>
+                <tr><th>{tx('Field')}</th><th>{tx('Rule')}</th><th>{tx('Applies to')}</th><th>{tx('Options')}</th></tr>
               </thead>
               <tbody>
                 {TASK_FIELD_DEFS.map((f) => {
@@ -2500,10 +2498,10 @@ function SettingsTab() {
                               </span>
                             ))}
                             <span className="opt-add">
-                              <input className="input pc-mini" placeholder="Add…" value={optDraft[f.key] || ''}
+                              <input className="input pc-mini" placeholder={tx('Add…')} value={optDraft[f.key] || ''}
                                 onChange={(e) => setOptDraft({ ...optDraft, [f.key]: e.target.value })}
                                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOption(f.key) } }} />
-                              <button type="button" className="btn btn-sm" onClick={() => addOption(f.key)}>Add</button>
+                              <button type="button" className="btn btn-sm" onClick={() => addOption(f.key)}>{tx('Add')}</button>
                             </span>
                           </div>
                         ) : <span className="stat-sub">—</span>}
@@ -2523,13 +2521,13 @@ function SettingsTab() {
           {fields.crew && (
             <>
               <div className="section-head" style={{ marginTop: 18 }}>
-                <h2>Who must be on a task</h2>
-                <span className="count">· only these hats count as missing on a task</span>
+                <h2>{tx('Who must be on a task')}</h2>
+                <span className="count">{tx('· only these hats count as missing on a task')}</span>
               </div>
               <div className="card table-wrap">
                 <table className="tbl crew-tbl">
                   <thead>
-                    <tr><th>Hat</th><th>Demanded on</th></tr>
+                    <tr><th>{tx('Hat')}</th><th>{tx('Demanded on')}</th></tr>
                   </thead>
                   <tbody>
                     {[
@@ -2770,10 +2768,10 @@ function PipelineTab() {
   return (
     <>
       <div className="section-head">
-        <h2>Content pipeline</h2>
-        <span className="count">· stages every task moves through</span>
+        <h2>{tx('Content pipeline')}</h2>
+        <span className="count">{tx('· stages every task moves through')}</span>
         <span className="spacer" />
-        <button className="btn btn-primary btn-sm" onClick={() => { setModal({ label: '', color: STATUS_COLORS[0] }); setErr('') }}><Plus size={15} /> Add stage</button>
+        <button className="btn btn-primary btn-sm" onClick={() => { setModal({ label: '', color: STATUS_COLORS[0] }); setErr('') }}><Plus size={15} /> {tx('Add stage')}</button>
       </div>
       <div className="card" style={{ padding: '6px 14px' }}>
         {statuses.map((s, i) => (
@@ -2781,35 +2779,35 @@ function PipelineTab() {
             <span className="status-dot" style={{ background: s.color, width: 12, height: 12 }} />
             <span style={{ fontWeight: 600 }}>{s.label}</span>
             {s.is_final
-              ? <span className="badge">Final — counts as published</span>
-              : <button className="btn btn-ghost btn-sm" onClick={() => setFinal(s)} data-tip="Tasks reaching this stage count as published">Make final</button>}
+              ? <span className="badge">{tx('Final — counts as published')}</span>
+              : <button className="btn btn-ghost btn-sm" onClick={() => setFinal(s)} data-tip={tx('Tasks reaching this stage count as published')}>{tx('Make final')}</button>}
             <span className="spacer" style={{ flex: 1 }} />
-            <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} data-tip="Move stage earlier" aria-label="Up"><ArrowUp size={15} /></button>
-            <button className="icon-btn" disabled={i === statuses.length - 1} onClick={() => move(i, 1)} data-tip="Move stage later" aria-label="Down"><ArrowDown size={15} /></button>
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setModal({ id: s.id, label: s.label, color: s.color }); setErr('') }} data-tip="Rename or recolor" aria-label="Edit"><Pencil size={15} /></button>
-            <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(s)} data-tip="Delete this stage" data-tip-left="" aria-label="Delete"><Trash2 size={15} /></button>
+            <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} data-tip={tx('Move stage earlier')} aria-label={tx('Up')}><ArrowUp size={15} /></button>
+            <button className="icon-btn" disabled={i === statuses.length - 1} onClick={() => move(i, 1)} data-tip={tx('Move stage later')} aria-label={tx('Down')}><ArrowDown size={15} /></button>
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setModal({ id: s.id, label: s.label, color: s.color }); setErr('') }} data-tip={tx('Rename or recolor')} aria-label="Edit"><Pencil size={15} /></button>
+            <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(s)} data-tip={tx('Delete this stage')} data-tip-left="" aria-label={tx('Delete')}><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
 
       {/* ---- the design board's columns ---- */}
       <div className="section-head" style={{ marginTop: 18 }}>
-        <h2>Design board</h2>
-        <span className="count">· columns on the Design page</span>
+        <h2>{tx('Design board')}</h2>
+        <span className="count">{tx('· columns on the Design page')}</span>
         <span className="spacer" />
-        <button className="btn btn-primary btn-sm" onClick={() => { setDModal({ label: '', color: STATUS_COLORS[0] }); setDErr('') }}><Plus size={15} /> Add column</button>
+        <button className="btn btn-primary btn-sm" onClick={() => { setDModal({ label: '', color: STATUS_COLORS[0] }); setDErr('') }}><Plus size={15} /> {tx('Add column')}</button>
       </div>
       <div className="card" style={{ padding: '6px 14px' }}>
         {dStages.map((s, i) => (
           <div key={s.id} className="chan-row u-row">
             <span className="status-dot" style={{ background: s.color, width: 12, height: 12 }} />
             <span style={{ fontWeight: 600 }}>{s.label}</span>
-            {i === 0 && <span className="badge">Where new artwork lands</span>}
+            {i === 0 && <span className="badge">{tx('Where new artwork lands')}</span>}
             <span className="spacer" style={{ flex: 1 }} />
-            <button className="icon-btn" disabled={i === 0} onClick={() => dMove(i, -1)} data-tip="Move column left" aria-label="Up"><ArrowUp size={15} /></button>
-            <button className="icon-btn" disabled={i === dStages.length - 1} onClick={() => dMove(i, 1)} data-tip="Move column right" aria-label="Down"><ArrowDown size={15} /></button>
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setDModal({ id: s.id, label: s.label, color: s.color }); setDErr('') }} data-tip="Rename or recolor" aria-label="Edit"><Pencil size={15} /></button>
-            <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => dDel(s)} data-tip="Delete this column" data-tip-left="" aria-label="Delete"><Trash2 size={15} /></button>
+            <button className="icon-btn" disabled={i === 0} onClick={() => dMove(i, -1)} data-tip={tx('Move column left')} aria-label={tx('Up')}><ArrowUp size={15} /></button>
+            <button className="icon-btn" disabled={i === dStages.length - 1} onClick={() => dMove(i, 1)} data-tip={tx('Move column right')} aria-label={tx('Down')}><ArrowDown size={15} /></button>
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setDModal({ id: s.id, label: s.label, color: s.color }); setDErr('') }} data-tip={tx('Rename or recolor')} aria-label="Edit"><Pencil size={15} /></button>
+            <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => dDel(s)} data-tip={tx('Delete this column')} data-tip-left="" aria-label={tx('Delete')}><Trash2 size={15} /></button>
           </div>
         ))}
         <div className="stat-sub" style={{ padding: '4px 0 10px' }}>
@@ -2823,15 +2821,15 @@ function PipelineTab() {
           title={dModal.id ? 'Edit design column' : 'New design column'}
           onClose={() => setDModal(null)}
           footer={<>
-            <button className="btn" onClick={() => setDModal(null)}>Cancel</button>
+            <button className="btn" onClick={() => setDModal(null)}>{tx('Cancel')}</button>
             <button className="btn btn-primary" onClick={dSave} disabled={!dModal.label.trim()}>{dModal.id ? 'Save' : 'Add'}</button>
           </>}
         >
           {dErr && <div className="form-error"><AlertCircle size={16} /> {dErr}</div>}
-          <div className="field"><label>Name</label>
-            <input className="input" autoFocus value={dModal.label} onChange={(e) => setDModal({ ...dModal, label: e.target.value })} placeholder="e.g. Sent back" />
+          <div className="field"><label>{tx('Name')}</label>
+            <input className="input" autoFocus value={dModal.label} onChange={(e) => setDModal({ ...dModal, label: e.target.value })} placeholder={tx('e.g. Sent back')} />
           </div>
-          <div className="field"><label>Color</label>
+          <div className="field"><label>{tx('Color')}</label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {STATUS_COLORS.map((c) => (
                 <button key={c} type="button" onClick={() => setDModal({ ...dModal, color: c })} aria-label={c}
@@ -2846,14 +2844,14 @@ function PipelineTab() {
       {rules && statuses.length > 0 && (
         <>
           <div className="section-head" style={{ marginTop: 18 }}>
-            <h2>Stage rules</h2>
-            <span className="count">· who may move a task out of each stage</span>
+            <h2>{tx('Stage rules')}</h2>
+            <span className="count">{tx('· who may move a task out of each stage')}</span>
           </div>
           <div className="card table-wrap">
             <table className="tbl rules-tbl">
               <thead>
                 <tr>
-                  <th>Stage</th>
+                  <th>{tx('Stage')}</th>
                   {STAGE_ACTORS.map((a) => <th key={a.key}>{a.label}</th>)}
                 </tr>
               </thead>
@@ -2862,7 +2860,7 @@ function PipelineTab() {
                   <tr key={s.id}>
                     <td>
                       <span className="status-dot" style={{ background: s.color, marginRight: 7 }} />
-                      <b>{s.label}</b> <span className="stat-sub">→ onward</span>
+                      <b>{s.label}</b> <span className="stat-sub">{tx('→ onward')}</span>
                     </td>
                     {STAGE_ACTORS.map((a) => {
                       const on = !!rules[a.key]?.[s.id]
@@ -2895,15 +2893,15 @@ function PipelineTab() {
           title={modal.id ? 'Edit stage' : 'New stage'}
           onClose={() => setModal(null)}
           footer={<>
-            <button className="btn" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn" onClick={() => setModal(null)}>{tx('Cancel')}</button>
             <button className="btn btn-primary" onClick={save} disabled={!modal.label.trim()}>{modal.id ? 'Save' : 'Add'}</button>
           </>}
         >
           {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-          <div className="field"><label>Name</label>
-            <input className="input" autoFocus value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} placeholder="e.g. On review" />
+          <div className="field"><label>{tx('Name')}</label>
+            <input className="input" autoFocus value={modal.label} onChange={(e) => setModal({ ...modal, label: e.target.value })} placeholder={tx('e.g. On review')} />
           </div>
-          <div className="field"><label>Color</label>
+          <div className="field"><label>{tx('Color')}</label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {STATUS_COLORS.map((c) => (
                 <button key={c} type="button" onClick={() => setModal({ ...modal, color: c })} aria-label={c}
@@ -2999,8 +2997,8 @@ function ReportsTab({ channel, setChannel }) {
   return (
     <>
       <div className="section-head">
-        <h2>Who did what</h2>
-        <span className="count">· completed work, one source of truth</span>
+        <h2>{tx('Who did what')}</h2>
+        <span className="count">{tx('· completed work, one source of truth')}</span>
         <span className="spacer" />
         <div className="pill-group">
           {PRESETS.map((p) => (
@@ -3017,7 +3015,7 @@ function ReportsTab({ channel, setChannel }) {
 
       {/* Channel lens: All, or one channel in its own color */}
       <div className="pill-group" style={{ margin: '4px 0 14px' }}>
-        <button className={'pill' + (channel === 'all' ? ' active' : '')} onClick={() => setChannel('all')} data-tip="All channels together">All channels</button>
+        <button className={'pill' + (channel === 'all' ? ' active' : '')} onClick={() => setChannel('all')} data-tip={tx('All channels together')}>{tx('All channels')}</button>
         {channels.map((c) => (
           <button key={c.key} className={'pill' + (channel === c.key ? ' active' : '')} onClick={() => setChannel(c.key)}
             data-tip={`Only ${c.label}'s completed work`}>
@@ -3243,8 +3241,8 @@ function ReportsTab({ channel, setChannel }) {
           ))}
         </div>
         <select className="select rp-type" value={type} onChange={(e) => setType(e.target.value)}
-          data-tip="Only one kind of piece">
-          <option value="">Every type</option>
+          data-tip={tx('Only one kind of piece')}>
+          <option value="">{tx('Every type')}</option>
           {CONTENT_TYPES.map((c) => <option key={c.key} value={c.key}>{typeInfo(c.key).plan || c.label}</option>)}
         </select>
       </div>
@@ -3304,9 +3302,9 @@ function ReportsTab({ channel, setChannel }) {
                     </div>
                     <div className="rp-person-total">
                       <b>{n}</b>
-                      <span>done</span>
+                      <span>{tx('done')}</span>
                       {r.late > 0 && (
-                        <span className="rp-late" data-tip="Delivered after the day they promised. A piece that arrived to them late is not counted against them.">
+                        <span className="rp-late" data-tip={tx('Delivered after the day they promised. A piece that arrived to them late is not counted against them.')}>
                           {r.late} late
                         </span>
                       )}
@@ -3331,7 +3329,7 @@ function ReportsTab({ channel, setChannel }) {
                 </div>
               )
             })}
-            {people.length === 0 && <div className="card card-pad empty">Nothing completed in this period.</div>}
+            {people.length === 0 && <div className="card card-pad empty">{tx('Nothing completed in this period.')}</div>}
           </div>
         </>
       )}

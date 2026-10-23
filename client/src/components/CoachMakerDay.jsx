@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { ArrowRight, Check, Send, PenLine } from 'lucide-react'
 import {
-  KIND, MakerBadge, RemindButton, Hero, More, WhatsNew,
+  KIND, MakerBadge, RemindButton, StartHere, More, WhatsNew,
   firstName, dayInLine, dayShort, hoursOf, lateWords,
 } from './CoachParts.jsx'
+import Timeline, { timelineOf } from './Timeline.jsx'
 import { api } from '../lib/api.js'
 import { longDayLabel } from '../lib/constants.js'
 import { reviewDue } from '../lib/due.js'
@@ -60,6 +61,10 @@ const GROUPS = [
   { key: 'late', label: () => tx('Overdue'), why: () => tx('Past its day. Remind the person who has it — or do your own step.'), none: () => tx('Nothing is late.') },
   { key: 'move', label: () => tx('Your move'), why: () => tx('The crew can’t start until you add your words.'), none: () => tx('Nothing waits for your words.') },
   { key: 'ready', label: () => tx('Ready to publish'), why: () => tx('Finished. Post it and press “Publish”.'), none: () => tx('Nothing is ready yet. Finished pieces land here.') },
+  // A piece with no day is on no week and no calendar — so it is here, by
+  // name, until it is given one (the owner, 23 Oct 2026: "I don't know where
+  // to find the task").
+  { key: 'nodate', label: () => tx('No day yet'), why: () => tx('Give it a day — until then it is only here.'), none: () => '' },
 ]
 const SUBS = [
   { key: 'check', label: () => tx('Check it'), why: () => tx('An edit or artwork came in. Look and answer.'), none: () => tx('Nothing to check. New edits and artwork land here.') },
@@ -159,7 +164,10 @@ export default function CoachMakerDay({
     return (
       <div key={r.t.id} className={`co-row nonum ${KIND[kindOf(r)].cls}`}>
         <button type="button" className="co-row-b" onClick={() => onOpen(r.t)}>
-          <span className="co-row-t">{colorOf(r.t) != null && <i className="pc-dot" style={colorStyle(colorOf(r.t))} aria-hidden="true" />}{r.t.title}</span>
+          {making && <Timeline size="row" stops={timelineOf(r.t, pipe, making(r.t), { person, userId: user.id, today })} />}
+          <span className="co-row-t">
+            {colorOf(r.t) != null && <i className="pc-dot" style={colorStyle(colorOf(r.t))} aria-hidden="true" />}{r.t.title}
+          </span>
           <span className="co-row-f">{factOf(r)}</span>
         </button>
         <span className="co-row-r">
@@ -183,19 +191,19 @@ export default function CoachMakerDay({
               : act.kind === 'ownfix' ? tx('Changes were asked of you. Somebody waits for the new version.')
                 : tx('This step is yours, and it is next.')
     return (
-      <Hero kind={kindOf(r)} title={t.title} onOpen={() => onOpen(t)} why={why}
-        eyebrow={<MakerBadge row={r} today={today} nameOf={nameOf} />}
+      <StartHere kind={kindOf(r)} own title={t.title} onOpen={() => onOpen(t)} why={why}
+        line={<MakerBadge row={r} today={today} nameOf={nameOf} />}
+        /* r11 (the owner): the preview — watch what was handed in, right here. */
+        extra={act.kind === 'check' ? <div className="co-here-prev"><TaskFiles taskId={t.id} /></div> : null}
         buttons={act.kind === 'check' ? (
           <>
-            {/* r11 (the owner): the preview — watch what was handed in, right here. */}
-            <div className="co-hero-prev"><TaskFiles taskId={t.id} /></div>
-            <button type="button" className="co-btn co-btn-p co-btn-lg" disabled={busy} onClick={() => accept(r)}>
+            <button type="button" className="co-btn co-btn-p" disabled={busy} onClick={() => accept(r)}>
               <Check size={18} aria-hidden="true" />{act.what === 'cut' ? tx('Accept the edit') : tx('Accept the artwork')}
             </button>
-            {reviewsOn(t).ask && <button type="button" className="co-btn co-btn-s co-btn-lg" onClick={() => onOpen(t, { focus: 'note' })}>{tx('Ask for changes')}</button>}
+            {reviewsOn(t).ask && <button type="button" className="co-btn co-btn-s" onClick={() => onOpen(t, { focus: 'note' })}>{tx('Ask for changes')}</button>}
           </>
         ) : (
-          <button type="button" className="co-btn co-btn-p co-btn-lg" onClick={() => onOpen(t)}>{verbOf(act)} <ArrowRight size={18} aria-hidden="true" /></button>
+          <button type="button" className="co-btn co-btn-p" onClick={() => onOpen(t, { focus: 'step' })}>{verbOf(act)} <ArrowRight size={18} aria-hidden="true" /></button>
         )} />
     )
   }

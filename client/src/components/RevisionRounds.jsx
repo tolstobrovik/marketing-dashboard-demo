@@ -3,6 +3,7 @@ import { Check, ExternalLink, RotateCcw, Send } from 'lucide-react'
 import { tr as tx, locale } from '../lib/i18n.jsx'
 import { deliveryHref } from '../lib/text.js'
 import { api } from '../lib/api.js'
+import { fmtDay, tashkentDay } from '../lib/constants.js'
 import { toast } from '../lib/toast.js'
 import { VoicePlayer } from './VoiceNote.jsx'
 import Zoom from './Zoom.jsx'
@@ -15,7 +16,7 @@ import PravkaNote from './PravkaNote.jsx'
 //
 // The notes go to /content/revisions/:rid/notes, never under /content/:id/…:
 // the client reads an answer from there as the task itself.
-const day = (iso) => (iso ? new Date(iso).toLocaleDateString(locale(), { month: 'short', day: 'numeric' }) : '')
+const day = (iso) => (iso ? fmtDay(tashkentDay(iso)) : '')
 const SEAT = { operator: 'to the operator', editor: 'to the editor', designer: 'to the designer' }
 
 export default function RevisionRounds({ taskId, revisions, onChange }) {

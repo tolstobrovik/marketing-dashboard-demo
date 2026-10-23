@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Check, ChevronDown, Upload } from 'lucide-react'
 import {
-  KIND, CrewBadge, Empty, WhatsNew, KindMark, ownOf,
+  KIND, CrewBadge, Empty, WhatsNew, KindMark, ownOf, StartHere,
   firstName, dayInLine, dayShort, hoursOf,
 } from './CoachParts.jsx'
 import { Capsule, tracks, Frame, DayChip } from './CoachBits.jsx'
-import HandIn from './HandIn.jsx'
+import Timeline, { timelineOf } from './Timeline.jsx'
 import { api } from '../lib/api.js'
 import { longDayLabel, typeLabel, serverNow } from '../lib/constants.js'
 import { ownersOf } from '../lib/coach.js'
@@ -64,6 +64,8 @@ const BANDS = [
   { key: 'late', label: () => tx('Overdue'), none: () => tx('Nothing is late.') },
   { key: 'today', label: () => tx('Today'), none: () => tx('Nothing for today.') },
   { key: 'soon', label: () => tx('Coming up'), none: () => tx('Nothing planned yet.') },
+  // Yours, with no day: under the three bands, never hidden (23 Oct 2026).
+  { key: 'none', label: () => tx('No day yet'), none: () => '' },
   { key: 'done', label: () => tx('Done today'), none: () => '' },
 ]
 // Three rows a band and the rest one press away (the owner's Planner pick, 15 Oct 2026).
@@ -126,7 +128,14 @@ export default function CoachCrewDay({
       {/* r11: no icon square on a row — the mark (camera, film, or both cut on
           the diagonal: what of the piece is yours) and the colour dot carry it. */}
       <button type="button" className="co-row-b" onClick={() => open(r)}>
-        <span className="co-row-t"><KindMark {...ownOf(r.t, user.id)} size={18} />{colorOf(r.t) != null && <i className="pc-dot" style={colorStyle(colorOf(r.t))} aria-hidden="true" />}{r.t.title}</span>
+        {/* r18: the piece's line of stops over the title — the lit stop where it
+            stands, a ring where it is yours; the camera-and-scissors mark where
+            the making is not known. */}
+        {making && <Timeline size="row" stops={timelineOf(r.t, pipe, making(r.t), { person, userId: user.id, today })} />}
+        <span className="co-row-t">
+          {!making && <KindMark {...ownOf(r.t, user.id)} size={18} />}
+          {colorOf(r.t) != null && <i className="pc-dot" style={colorStyle(colorOf(r.t))} aria-hidden="true" />}{r.t.title}
+        </span>
         <span className="co-row-f">{waits(r) ? waitsFor(r) : factOf(r)}</span>
       </button>
       <span className="co-row-r">
@@ -216,36 +225,27 @@ export default function CoachCrewDay({
     const label = picked ? (r.kind === 'shoot' ? (r.state === 'ask' ? tx('Asked of you') : tx('Shoot')) : tx('Picked'))
       : r === running ? tx('Filming now') : tx('Now')
     const sub = r.kind === 'shoot' && r.due === today && hoursOf(r.t) ? (r === running ? tx('until {time}', { time: hh(r.t.recording_end) || '' }) : hoursOf(r.t)) : ''
+    // D-02: the same card as the maker's. The drop box is the window's (the
+    // button opens it with the step in focus); the card never holds a form.
     return (
-      <section className={`co-now ${KIND[r.kind].cls}`} aria-labelledby="co-now-t">
-        <p className="co-now-l">
-          {label}{sub && <span>{sub}</span>}{twoJobs && <span className="co-kind">{KIND[r.kind].word()}</span>}<CrewBadge row={r} today={today} />
-          {picked && <button type="button" className="co-link co-now-x" onClick={() => setPick(null)}>{tx('Not now')}</button>}
-        </p>
-        <div className="co-now-t">
-          <KindMark {...ownOf(r.t, user.id)} size={22} />
-          <div>
-            <h2 id="co-now-t"><button type="button" onClick={() => open(r)}>{r.t.title}</button></h2>
-            {why && <p className="co-why">{why}</p>}
-          </div>
-        </div>
-        {making && tracks(user, r.t) && <Capsule t={r.t} pipe={pipe} making={making(r.t)} userId={user.id} person={person} />}
-        {r.state === 'ask' ? (
-          <div className="co-btns">
+      <StartHere kind={r.kind} id="co-now-t" title={r.t.title} onOpen={() => open(r)} why={why}
+        label={label}
+        line={<>
+          {sub && <span>{sub}</span>}{twoJobs && <span className="co-kind">{KIND[r.kind].word()}</span>}<CrewBadge row={r} today={today} />
+          {picked && <button type="button" className="co-link co-here-x" onClick={() => setPick(null)}>{tx('Not now')}</button>}
+        </>}
+        mark={<KindMark {...ownOf(r.t, user.id)} size={22} />}
+        extra={making ? <Capsule t={r.t} pipe={pipe} making={making(r.t)} userId={user.id} person={person} today={today} /> : null}
+        buttons={r.state === 'ask' ? (
+          <>
             <button type="button" className="co-btn co-btn-p" disabled={busy} onClick={() => sayYes(r)}><Check size={18} aria-hidden="true" />{tx('I can make it')}</button>
             <button type="button" className="co-btn co-btn-s" disabled={busy} onClick={() => open(r, 'no')}>{tx('I can’t')}</button>
-          </div>
-        ) : r.state === 'go' ? (
-          // It can be handed in now: the place to drop the file is the card.
-          <HandIn inline key={r.key} item={r.t} kind={r.kind} label={button} steps={after} sendIcon onDone={(u) => { setPick(null); onChanged?.(u) }} />
+          </>
         ) : (
-          <div className="co-btns"><button type="button" className="co-btn co-btn-p" onClick={() => open(r)}>{button} <ArrowRight size={18} aria-hidden="true" /></button></div>
+          <button type="button" className="co-btn co-btn-p" onClick={() => open(r, 'step')}>{button} <ArrowRight size={18} aria-hidden="true" /></button>
         )}
-        <p className="co-now-ln">
-          <button type="button" className="co-link" onClick={() => open(r)}>{tx('Open the task')}</button>
-          {later && <span>{picked ? tx('After this') : tx('After the shoot')}: <button type="button" className="co-link" onClick={() => open(later)}>{later.t.title}</button></span>}
-        </p>
-      </section>
+        after={later ? <span>{picked ? tx('After this') : tx('After the shoot')}: <button type="button" className="co-link" onClick={() => open(later)}>{later.t.title}</button></span>
+          : r.state === 'go' && after ? <span>{tx('After you press:')} {after}</span> : null} />
     )
   }
 
@@ -299,10 +299,11 @@ export default function CoachCrewDay({
   const carriedKeys = new Set(carriedRows.map((r) => r.key))
   const from = carriedFrom(carriedRows, today, (r) => r.t)
   const bands = BANDS.map((b) => ({ ...b, rows: rows.filter((r) => r.band === b.key && !waits(r) && !carriedKeys.has(r.key) && !shown.has(r.key)) }))
-  const cols = bands.filter((b) => b.key !== 'done')
+  const cols = bands.filter((b) => b.key !== 'done' && b.key !== 'none')
   const doneRows = bands.find((b) => b.key === 'done').rows
+  const noDayRows = bands.find((b) => b.key === 'none').rows
   const parked = rows.filter((r) => waits(r) && !shown.has(r.key))
-  const listed = cols.some((b) => b.rows.length) || carriedRows.length > 0
+  const listed = cols.some((b) => b.rows.length) || carriedRows.length > 0 || noDayRows.length > 0
   const band = (b) => {
     const cut = openAll[b.key] ? b.rows.length : CUT
     return (
@@ -339,9 +340,9 @@ export default function CoachCrewDay({
       {(now || films || sq.length > 0) && (
         <div className={'co-nn' + (now ? '' : ' solo')}>
           {now ? hero(now) : (
-            <section className="co-now" aria-label={tx('Now')}>
-              <p className="co-now-l">{tx('Now')}<span>{tx('nothing you can start')}</span></p>
-              <p className="co-now-empty">{parked.length ? tx('Everything of yours waits for somebody else.') : tx('Nothing is waiting for you. New work shows up here the moment someone gives it to you.')}</p>
+            <section className="co-here co-here-none" aria-label={tx('Now')}>
+              <p className="co-here-l"><span className="co-here-w">{tx('Now')}</span><span>{tx('nothing you can start')}</span></p>
+              <p className="co-here-empty">{parked.length ? tx('Everything of yours waits for somebody else.') : tx('Nothing is waiting for you. New work shows up here the moment someone gives it to you.')}</p>
             </section>
           )}
           {square()}
@@ -367,6 +368,7 @@ export default function CoachCrewDay({
         {cols.map(band)}
       </section>
       {carriedRows.length > 0 && !wall && band({ key: 'carried', label: () => tx('Carried over from {month}', { month: monthLongOf(from) }), none: () => '', rows: carriedRows })}
+      {noDayRows.length > 0 && !wall && band(bands.find((b) => b.key === 'none'))}
       {!now && !listed && parked.length === 0 && doneRows.length === 0 && (
         <Empty good title={tx('All done, {name}', { name })}
           why={tx('Nothing is waiting for you. New work shows up here the moment someone gives it to you.')} />

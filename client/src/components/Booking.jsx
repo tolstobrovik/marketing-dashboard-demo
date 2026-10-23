@@ -3,7 +3,8 @@ import { CalendarCheck, CalendarX, Clock, Check, X, Hourglass, Undo2 } from 'luc
 import { api } from '../lib/api.js'
 import { toast } from '../lib/toast.js'
 import { tr as tx, locale } from '../lib/i18n.jsx'
-import { todayISO } from '../lib/constants.js'
+import DayPick, { TimePick } from './DayPick.jsx'
+import { todayISO, fmtDay } from '../lib/constants.js'
 import { editDue } from '../lib/due.js'
 
 // ---- the time the crew agreed to ----
@@ -29,11 +30,7 @@ const HOURS = (from, to) => {
   return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`
 }
 
-const dayWords = (iso) => {
-  if (!iso) return ''
-  const d = new Date(`${iso}T00:00:00`)
-  return d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' })
-}
+const dayWords = (iso) => fmtDay(iso)
 
 // `openNo` opens it with the "no" already being written — for the Coach look's
 // big card, whose "I can’t" has to land on the reason box, because a no is
@@ -133,13 +130,13 @@ export default function Booking({ item, which, label, holderName, mine, onAnswer
             </label>
             {saying.mode === 'later' && (
               <div className="bk-when-pick">
-                <input type="date" className="input" min={todayISO()} value={saying.day} aria-label={tx('Suggest a day')}
-                  onChange={(e) => setSaying({ ...saying, day: e.target.value })} />
+                <DayPick value={saying.day} min={todayISO()} label={tx('Suggest a day')} placeholder={tx('Suggest a day')}
+                  onChange={(d) => setSaying({ ...saying, day: d })} />
                 {K.from && (<>
                   <span className="stat-sub">{tx('from')}</span>
-                  <input type="time" className="input" value={saying.from} onChange={(e) => setSaying({ ...saying, from: e.target.value })} />
+                  <TimePick value={saying.from} label={tx('from')} onChange={(t) => setSaying({ ...saying, from: t })} />
                   <span className="stat-sub">{tx('to')}</span>
-                  <input type="time" className="input" value={saying.to} onChange={(e) => setSaying({ ...saying, to: e.target.value })} />
+                  <TimePick value={saying.to} label={tx('to')} onChange={(t) => setSaying({ ...saying, to: t })} />
                 </>)}
               </div>
             )}

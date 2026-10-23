@@ -1,9 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api, cache } from './api.js'
 import { useAuth } from './auth.jsx'
 
 // Sidebar channels come from the server so the admin can add/rename/reorder them.
-const Ctx = createContext({ channels: [], visible: [], byKey: {}, reload: () => {} })
+const Ctx = createContext({ channels: [], visible: [], byKey: {}, reload: () => {}, failed: false, retry: () => {} })
+
+// A first load that fails is asked again on a widening wait (S-08). One
+// failed GET /api/channels after a server restart used to leave the sidebar
+// with no channels and the new-idea dialog with nothing to choose, until
+// somebody reloaded the page by hand. The last wait repeats, so a server that
+// comes back is seen within ten seconds and nothing polls faster than that.
+const BACKOFF = [1000, 3000, 10000]
 
 export function ChannelsProvider({ children }) {
   const { user } = useAuth()
@@ -14,17 +21,37 @@ export function ChannelsProvider({ children }) {
   // wrote, and not the answer it is handed.
   const asList = (v) => (Array.isArray(v) ? v : [])
   const [channels, setChannels] = useState(() => asList(cache.get('channels')))
+  // The last load failed and the next try is on its way. The screens read it
+  // only when the list is empty: a failed refresh over a good list is a blip.
+  const [failed, setFailed] = useState(false)
+  const tries = useRef(0)
+  const timer = useRef(0)
 
-  const reload = useCallback(() => {
+  const load = useRef(() => {})
+  load.current = () => {
     if (!user || user.role === 'ambassador') return // refused to them (server/auth.js)
+    clearTimeout(timer.current)
     api.get('/channels').then((list) => {
       if (!Array.isArray(list)) return // keep the last good list rather than break
+      tries.current = 0
+      setFailed(false)
       setChannels(list)
       cache.set('channels', list)
-    }).catch(() => {})
-  }, [user])
+    }).catch(() => {
+      setFailed(true)
+      const wait = BACKOFF[Math.min(tries.current++, BACKOFF.length - 1)]
+      timer.current = setTimeout(() => load.current(), wait)
+    })
+  }
+  const reload = useCallback(() => load.current(), [])
+  // "Retry" pressed: now, and the waits start short again.
+  const retry = useCallback(() => { tries.current = 0; load.current() }, [])
 
-  useEffect(() => { reload() }, [reload])
+  useEffect(() => {
+    tries.current = 0
+    load.current()
+    return () => clearTimeout(timer.current)
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo(() => {
     const byKey = Object.fromEntries(channels.map((c) => [c.key, c]))
@@ -33,8 +60,8 @@ export function ChannelsProvider({ children }) {
       : user.role === 'admin'
         ? channels
         : channels.filter((c) => user.departments.includes(c.key))
-    return { channels, visible, byKey, reload }
-  }, [channels, user])
+    return { channels, visible, byKey, reload, failed, retry }
+  }, [channels, user, reload, failed, retry])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

@@ -54,7 +54,7 @@ export default function Toasts() {
     t.action.onClick()
   }
   return (
-    <div className="toasts" aria-live="polite">
+    <div className="toasts" role="status" aria-live="polite">
       {list.map((t) => {
         const left = t.action ? Math.max(0, Math.ceil((t.until - Date.now()) / 1000)) : 0
         return (

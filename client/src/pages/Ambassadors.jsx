@@ -556,7 +556,7 @@ function IFilmedIt({ card, onClose, onSent }) {
       <div className="cm-row">
         <span className="cm-key">{tx('Link to the video')}</span>
         <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus
-          placeholder="https://drive.google.com/…" autoCapitalize="off" autoCorrect="off" />
+          placeholder={'https://drive.google.com/…'} autoCapitalize="off" autoCorrect="off" />
       </div>
       <div className="cm-hint">{tx('Do not post it anywhere yet. We watch it first, and we may ask for changes.')}</div>
     </Modal>
@@ -596,12 +596,12 @@ function IPostedIt({ card, onClose, onSent }) {
       <div className="cm-row">
         <span className="cm-key">{tx('Link to the post')}</span>
         <input className="input" value={main} onChange={(e) => setMain(e.target.value)} autoFocus
-          placeholder="https://instagram.com/reel/…" autoCapitalize="off" autoCorrect="off" />
+          placeholder={'https://instagram.com/reel/…'} autoCapitalize="off" autoCorrect="off" />
       </div>
       <div className="cm-row">
         <span className="cm-key">{tx('Story link')} <span className="crew-opt">{tx('optional')}</span></span>
         <input className="input" value={story} onChange={(e) => setStory(e.target.value)}
-          placeholder="https://instagram.com/stories/…" autoCapitalize="off" autoCorrect="off" />
+          placeholder={'https://instagram.com/stories/…'} autoCapitalize="off" autoCorrect="off" />
       </div>
       <div className="cm-hint">{tx('We open the link, check it, and then it counts for this month.')}</div>
     </Modal>

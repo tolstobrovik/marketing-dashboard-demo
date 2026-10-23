@@ -257,7 +257,7 @@ export default function Overview() {
       </div>
 
       {/* ---- the months, side by side ---- */}
-      <ChartCard title="Month by month"
+      <ChartCard title={tx('Month by month')}
         sub={tx('What went out each month, and how much of it made its release day')}>
         <MonthBars months={rep?.months || []} selected={month} onPick={setMonth} />
       </ChartCard>
@@ -269,7 +269,7 @@ export default function Overview() {
           because "539 pieces finished" beside a month of 53 was the single
           most misread number on this board. */}
       <ChartCard
-        title="When the team works"
+        title={tx('When the team works')}
         sub={act ? (act.rate
           ? `${tx('{n} steps finished', { n: act.done })} · ${tx('{n} pieces went out', { n: act.pieces?.out ?? 0 })} · ${
             act.rate.per === 'day' ? tx('{n} a day on average', { n: act.rate.n })
@@ -298,13 +298,13 @@ export default function Overview() {
 
       {/* ---- who, and which day ---- */}
       <div className="ov-two">
-        <ChartCard title="Which day of the week" sub="Every step finished this month, by weekday">
+        <ChartCard title={tx('Which day of the week')} sub="Every step finished this month, by weekday">
           <BarChart
             rows={(act?.weekday || []).map((d) => ({ ...d, label: tx(d.label) }))}
             emptyText={tx('No work finished in this window')}
           />
         </ChartCard>
-        <ChartCard title="Who is carrying it" sub="Steps finished, by the person who finished them">
+        <ChartCard title={tx('Who is carrying it')} sub="Steps finished, by the person who finished them">
           <BarChart
             rows={(act?.people || []).slice(0, 8).map((p2) => ({ key: p2.id, label: p2.name, value: p2.n }))}
             emptyText={tx('No work finished in this window')}

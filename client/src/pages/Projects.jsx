@@ -114,88 +114,88 @@ export function ProjectForm({ project, team, metrics, onClose, onSaved, onDelete
       title={creating ? tx('New project') : tx('Project')}
       onClose={onClose}
       footer={<>
-        {!creating && isAdmin && <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> Delete</button>}
+        {!creating && isAdmin && <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> {tx('Delete')}</button>}
         <span className="foot-gap" />
-        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn" onClick={onClose}>{tx('Cancel')}</button>
         <button className="btn btn-primary" onClick={save}>{creating ? 'Create project' : 'Save'}</button>
       </>}
     >
       {err && <div className="pc-strip" style={{ marginBottom: 10 }}>{err}</div>}
-      <div className="field"><label>Name</label>
-        <input className="input" autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. YouTube growth" />
+      <div className="field"><label>{tx('Name')}</label>
+        <input className="input" autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={tx('e.g. YouTube growth')} />
       </div>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <div className="field"><label>Owner <span className="stat-sub">— one person</span></label>
+        <div className="field"><label>{tx('Owner')} <span className="stat-sub">{tx('— one person')}</span></label>
           <select className="select" value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value === '' ? '' : Number(e.target.value) })}>
-            <option value="">— no owner yet (renders red) —</option>
+            <option value="">{tx('— no owner yet (renders red) —')}</option>
             {ownerOptions(team).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </div>
-        <div className="field"><label>Status</label>
+        <div className="field"><label>{tx('Status')}</label>
           <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             {PROJECT_STATUSES.map((o) => <option key={o.value} value={o.value}>{tx(o.label)}</option>)}
           </select>
         </div>
       </div>
       {NEEDS_REASON.includes(form.status) && (
-        <div className="field"><label>Why <span className="stat-sub">— one line, shown under the status</span></label>
+        <div className="field"><label>{tx('Why')} <span className="stat-sub">{tx('— one line, shown under the status')}</span></label>
           <input className="input" value={form.status_reason} maxLength={300}
             onChange={(e) => setForm({ ...form, status_reason: e.target.value })}
             placeholder={form.status === 'at_risk' ? 'e.g. the venue has not confirmed' : 'e.g. printing slipped two weeks'} />
         </div>
       )}
       <div className="grid grid-3" style={{ gap: 12 }}>
-        <div className="field" style={{ gridColumn: '1 / -1' }}><label>Runs</label>
+        <div className="field" style={{ gridColumn: '1 / -1' }}><label>{tx('Runs')}</label>
           <div className="proj-range">
-            <input className="input" type="date" aria-label="From" value={form.start_date}
+            <input className="input" type="date" aria-label={tx('From')} value={form.start_date}
               onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
             <span className="proj-range-to">→</span>
-            <input className="input" type="date" aria-label="To" value={form.deadline}
+            <input className="input" type="date" aria-label={tx('To')} value={form.deadline}
               onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
           </div>
         </div>
       </div>
-      <div className="field"><label>Description <span className="stat-sub">(optional)</span></label>
+      <div className="field"><label>{tx('Description')} <span className="stat-sub">{tx('(optional)')}</span></label>
         <textarea className="input" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-          placeholder="What this area of the business is…" />
+          placeholder={tx('What this area of the business is…')} />
       </div>
       {/* Numbers. A project has as many as it measures; the current value is
           not here, because it is updated on the project page by whoever has
           the figure, not in the form by whoever is editing the plan. */}
       <div className="field">
-        <label>Numbers <span className="stat-sub">— what this project is counting</span></label>
+        <label>{tx('Numbers')} <span className="stat-sub">{tx('— what this project is counting')}</span></label>
         {numbers.map((n, i) => (
           <div key={n.id || i} className="row-edit">
             <input className="input" list="pf-metric-names" value={n.name} maxLength={60}
-              onChange={(e) => setNumber(i, { name: e.target.value })} placeholder="e.g. Visitors" />
+              onChange={(e) => setNumber(i, { name: e.target.value })} placeholder={tx('e.g. Visitors')} />
             <input className="input row-edit-num" type="number" min="0" value={n.target ?? ''}
-              onChange={(e) => setNumber(i, { target: e.target.value })} placeholder="target" />
-            <button className="icon-btn del-btn" onClick={() => dropNumber(i)} aria-label="Remove this number"><X size={14} /></button>
+              onChange={(e) => setNumber(i, { target: e.target.value })} placeholder={tx('target')} />
+            <button className="icon-btn del-btn" onClick={() => dropNumber(i)} aria-label={tx('Remove this number')}><X size={14} /></button>
           </div>
         ))}
         {/* Suggestions, not a menu: the box takes any name. The ten the board
             already knows are offered because "Leads" spelled three ways is
             three numbers nobody can add up. */}
         <datalist id="pf-metric-names">{metrics.map((m) => <option key={m} value={m} />)}</datalist>
-        <button className="btn btn-sm" onClick={addNumber}><Plus size={14} /> Add number</button>
+        <button className="btn btn-sm" onClick={addNumber}><Plus size={14} /> {tx('Add number')}</button>
       </div>
 
       {/* Criteria. Not the checklist: these are the things that must be TRUE
           when the project is finished, and every one of them has to be ticked
           before the project can be marked Done. */}
       <div className="field">
-        <label>Success criteria <span className="stat-sub">— what must be true at the end</span></label>
+        <label>{tx('Success criteria')} <span className="stat-sub">{tx('— what must be true at the end')}</span></label>
         {criteria.map((c, i) => (
           <div key={i} className="row-edit">
             <input className="input" value={c.text} maxLength={300}
               onChange={(e) => setCriterion(i, e.target.value)}
-              placeholder="e.g. Banners up before promotion starts" />
-            <button className="icon-btn del-btn" onClick={() => dropCriterion(i)} aria-label="Remove this criterion"><X size={14} /></button>
+              placeholder={tx('e.g. Banners up before promotion starts')} />
+            <button className="icon-btn del-btn" onClick={() => dropCriterion(i)} aria-label={tx('Remove this criterion')}><X size={14} /></button>
           </div>
         ))}
-        <button className="btn btn-sm" onClick={addCriterion}><Plus size={14} /> Add criterion</button>
+        <button className="btn btn-sm" onClick={addCriterion}><Plus size={14} /> {tx('Add criterion')}</button>
       </div>
-      <div className="field"><label>Budget <span className="stat-sub">(optional)</span></label>
+      <div className="field"><label>{tx('Budget')} <span className="stat-sub">{tx('(optional)')}</span></label>
         <input className="input" type="number" min="0" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} />
       </div>
       <PhotoField
@@ -629,7 +629,7 @@ export default function Projects() {
                     <div className="proj-detail">
                       {(p.numbers || []).length > 0 && (
                         <div className="proj-detail-col">
-                          <div className="proj-detail-h">Numbers</div>
+                          <div className="proj-detail-h">{tx('Numbers')}</div>
                           {p.numbers.map((n) => {
                             const target = Number(n.target) || 0
                             const current = Number(n.current) || 0
@@ -656,7 +656,7 @@ export default function Projects() {
                                         }}
                                       />
                                     ) : canEdit ? (
-                                      <button type="button" className="proj-num-cur edit" data-tip="Update this number"
+                                      <button type="button" className="proj-num-cur edit" data-tip={tx('Update this number')}
                                         onClick={() => setEditingNum({ pid: p.id, id: n.id, value: String(current) })}>
                                         {current.toLocaleString()}
                                       </button>
@@ -677,7 +677,7 @@ export default function Projects() {
                       )}
                       {(p.criteria || []).length > 0 && (
                         <div className="proj-detail-col">
-                          <div className="proj-detail-h">Criteria</div>
+                          <div className="proj-detail-h">{tx('Criteria')}</div>
                           {p.criteria.map((c, i) => (
                             <label key={i} className={'proj-crit-row' + (c.done ? ' met' : '')}>
                               {/* Tickable by the owner or an admin. Everybody
@@ -727,10 +727,10 @@ export default function Projects() {
               <button key={f.key} className={'pill' + (filter === f.key ? ' active' : '')} onClick={() => setFilter(f.key)}>{f.label}</button>
             ))}
             <span style={{ flex: 1 }} />
-            <span className="stat-sub" style={{ fontWeight: 700 }}>Sort:</span>
-            <button className={'pill' + (campSort === 'start' ? ' active' : '')} onClick={() => setCampSort('start')} data-tip="Earliest start on top">Start ↑</button>
-            <button className={'pill' + (campSort === 'end' ? ' active' : '')} onClick={() => setCampSort('end')} data-tip="Earliest end on top">End ↑</button>
-            <button className={'pill' + (campSort === 'daysleft' ? ' active' : '')} onClick={() => setCampSort('daysleft')} data-tip="Fewest days left on top" data-tip-left="">Days left ↑</button>
+            <span className="stat-sub" style={{ fontWeight: 700 }}>{tx('Sort:')}</span>
+            <button className={'pill' + (campSort === 'start' ? ' active' : '')} onClick={() => setCampSort('start')} data-tip={tx('Earliest start on top')}>{tx('Start ↑')}</button>
+            <button className={'pill' + (campSort === 'end' ? ' active' : '')} onClick={() => setCampSort('end')} data-tip={tx('Earliest end on top')}>{tx('End ↑')}</button>
+            <button className={'pill' + (campSort === 'daysleft' ? ' active' : '')} onClick={() => setCampSort('daysleft')} data-tip={tx('Fewest days left on top')} data-tip-left="">{tx('Days left ↑')}</button>
           </div>
           <div className="pc-camp-list">
             {filtered.map((c) => <CampaignRow key={c.id} c={c} byKey={byKey} onOpen={(x) => navigate(`/campaigns/${x.id}`)} />)}

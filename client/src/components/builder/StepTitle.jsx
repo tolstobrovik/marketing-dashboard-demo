@@ -2,12 +2,14 @@ import { useEffect, useRef } from 'react'
 import { PenLine } from 'lucide-react'
 import { tr as tx } from '../../lib/i18n.jsx'
 import CharCount from '../CharCount.jsx'
+import { KindPills } from './StepType.jsx'
 
-// Step 1 — what is it called? One box, already focused, and Enter moves on.
-// A name is the only thing a task cannot be born without; a description
-// under it is optional — and with those two it can already be saved as a
-// draft (the button beside Next), with every other question left for later.
-export default function StepTitle({ value, onChange, onNext, description, onDescription, required, channels = [] }) {
+// Step 1 — the idea. A name, already focused, and Enter moves on; under it
+// what kind of piece it is, with the channel's usual kind already chosen
+// (a reel on Instagram), and the idea itself in a few words. A name is the
+// only thing a task cannot be born without — with it alone "Save for now"
+// makes an idea, on today, and every other question waits.
+export default function StepTitle({ value, onChange, onNext, description, onDescription, required, channels = [], kinds = null }) {
   const ref = useRef(null)
   useEffect(() => { ref.current?.focus() }, [])
   return (
@@ -20,10 +22,11 @@ export default function StepTitle({ value, onChange, onNext, description, onDesc
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); if (value.trim()) onNext() }
         }} />
+      {kinds && <KindPills type={kinds.type} format={kinds.format} onPick={kinds.onPick} />}
       <label className={'tb-line tb-desc' + (required ? ' req' : '')}>
-        <span className="tb-line-label">{tx('Description')}{!required && <span className="crew-opt"> {tx('optional')}</span>}</span>
+        <span className="tb-line-label">{tx('The idea')}{!required && <span className="crew-opt"> {tx('optional')}</span>}</span>
         <textarea className="tb-line-input" rows={2} value={description} maxLength={4000}
-          placeholder={required ? tx('This kind of task needs a short description.') : tx('Anything else worth knowing')}
+          placeholder={required ? tx('This kind of task needs a short description.') : tx('What is it about, in a few words')}
           onChange={(e) => onDescription(e.target.value)} />
       </label>
       <CharCount text={description} channels={channels} />

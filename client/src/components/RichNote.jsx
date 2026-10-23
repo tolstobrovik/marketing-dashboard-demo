@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { Bold, List } from 'lucide-react'
+import { tr as tx } from '../lib/i18n.jsx'
 import { Rich } from '../lib/richtext.js'
 
 // The small box the role cards' details are written in.
@@ -109,9 +110,9 @@ export default function RichNote({ value, onChange, placeholder, rows = 5, previ
   return (
     <div className="rn">
       <div className="rn-bar">
-        <button type="button" className="rn-btn" onClick={bold} data-tip="Bold (⌘B)" aria-label="Bold"><Bold size={13} /></button>
-        <button type="button" className="rn-btn" onClick={bullets} data-tip="Bullet list" aria-label="Bullet list"><List size={13} /></button>
-        <span className="rn-hint">**bold** · start a line with - for a bullet</span>
+        <button type="button" className="rn-btn" onClick={bold} data-tip={tx('Bold (⌘B)')} aria-label={tx('Bold')}><Bold size={13} /></button>
+        <button type="button" className="rn-btn" onClick={bullets} data-tip={tx('Bullet list')} aria-label={tx('Bullet list')}><List size={13} /></button>
+        <span className="rn-hint">{tx('**bold** · start a line with - for a bullet')}</span>
       </div>
       <textarea
         ref={ref}
@@ -124,7 +125,7 @@ export default function RichNote({ value, onChange, placeholder, rows = 5, previ
       />
       {preview && value.trim() && (
         <div className="rn-preview">
-          <span className="rn-preview-key">On the card</span>
+          <span className="rn-preview-key">{tx('On the card')}</span>
           <Rich text={value} className="bn-rich" />
         </div>
       )}

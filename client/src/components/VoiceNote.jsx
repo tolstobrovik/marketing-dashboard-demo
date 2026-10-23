@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, Square, Trash2, Play, Pause } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { tr as tx } from '../lib/i18n.jsx'
 
 // Voice notes, the way a phone does them.
 //
@@ -91,20 +92,20 @@ export function VoiceRecorder({ onClip, disabled }) {
   useEffect(() => { onClip(clip ? { data: clip.data, secs: clip.secs } : null) }, [clip]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (state === 'denied') {
-    return <span className="vn-denied" data-tip="Your browser blocked the microphone — allow it in the address bar">🎤 blocked</span>
+    return <span className="vn-denied" data-tip={tx('Your browser blocked the microphone — allow it in the address bar')}>🎤 {tx('blocked')}</span>
   }
   if (state === 'ready' && clip) {
     return (
       <span className="vn-ready">
         <audio className="vn-audio" src={clip.url} controls preload="metadata" />
-        <button type="button" className="icon-btn" onClick={drop} aria-label="Discard the recording"
-          data-tip="Throw it away and start again"><Trash2 size={14} /></button>
+        <button type="button" className="icon-btn" onClick={drop} aria-label={tx('Discard the recording')}
+          data-tip={tx('Throw it away and start again')}><Trash2 size={14} /></button>
       </span>
     )
   }
   if (state === 'recording') {
     return (
-      <button type="button" className="vn-btn vn-rec" onClick={stop} aria-label="Stop recording">
+      <button type="button" className="vn-btn vn-rec" onClick={stop} aria-label={tx('Stop recording')}>
         <Square size={13} fill="currentColor" /> {secsLabel(secs)}
         <span className="vn-pulse" />
       </button>
@@ -112,7 +113,7 @@ export function VoiceRecorder({ onClip, disabled }) {
   }
   return (
     <button type="button" className="vn-btn" onClick={start} disabled={disabled}
-      aria-label="Record a voice note" data-tip="Say it instead of typing it">
+      aria-label={tx('Record a voice note')} data-tip={tx('Say it instead of typing it')}>
       <Mic size={15} />
     </button>
   )
@@ -146,7 +147,7 @@ export function VoicePlayer({ id, secs, mine }) {
   return (
     <span className={'vn-play' + (mine ? ' vn-mine' : '')}>
       <button type="button" className="vn-play-btn" onClick={press} disabled={busy}
-        aria-label={playing ? 'Pause the voice note' : 'Play the voice note'}>
+        aria-label={playing ? tx('Pause the voice note') : tx('Play the voice note')}>
         {playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
       </button>
       <span className="vn-wave" aria-hidden="true">

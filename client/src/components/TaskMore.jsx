@@ -219,7 +219,7 @@ export default function TaskMore({ t, user, team, label = '', canEdit = false, c
           {asks.map((r) => (
             <div key={r.id} className={`ask-item ask-${r.state}`}>
               <span className="ask-line">
-                <b>{promisedDay(r.field)}</b>: {r.from_date || '—'} → {r.to_date || tx('cleared')}{' '}
+                <b>{promisedDay(r.field)}</b>: {r.from_date ? dayShort(r.from_date) : '—'} → {r.to_date ? dayShort(r.to_date) : tx('cleared')}{' '}
                 <span className={`chip ask-state ask-chip-${r.state}`}>
                   {r.state === 'open' ? tx('waiting on an admin') : r.state === 'approved' ? tx('moved') : r.state === 'stale' ? tx('out of date') : tx('kept where it was')}
                 </span>

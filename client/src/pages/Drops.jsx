@@ -30,7 +30,7 @@ export default function Drops() {
   return (
     <div className="co-drops-page">
       <header className="co-drops-head">
-        <h2>{tx('Unmatched files')}</h2>
+        <h2>{tx('Lost files')}</h2>
         <p className="co-help">{tx('Files dropped into the Google Drive folders whose names did not say which task they are for. Pick the task, and the file shows up on it.')}</p>
       </header>
       {err && <div className="form-error" role="alert">{err}</div>}

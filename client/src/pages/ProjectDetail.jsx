@@ -57,7 +57,7 @@ export default function ProjectDetail() {
 
   return (
     <>
-      <button className="btn btn-sm" style={{ marginBottom: 12 }} onClick={() => navigate('/projects')}><ArrowLeft size={14} /> Projects</button>
+      <button className="btn btn-sm" style={{ marginBottom: 12 }} onClick={() => navigate('/projects')}><ArrowLeft size={14} /> {tx('Projects')}</button>
 
       {/* A. WHAT THIS IS — name, who owns it, what it means, when it is due.
           Everything on this card answers "what am I looking at". The numbers
@@ -74,16 +74,16 @@ export default function ProjectDetail() {
               onChange={(status, reason) => patch({ status, status_reason: reason })}
             />
             {isAdmin && (
-              <button className="icon-btn" data-tip="Edit project fields" data-tip-left="" onClick={() => setProjModal(true)} aria-label="Edit">
+              <button className="icon-btn" data-tip={tx('Edit project fields')} data-tip-left="" onClick={() => setProjModal(true)} aria-label="Edit">
                 <Pencil size={15} />
               </button>
             )}
             {isAdmin && (
-              <button className="icon-btn del-btn" data-tip="Delete this project" data-tip-left=""
+              <button className="icon-btn del-btn" data-tip={tx('Delete this project')} data-tip-left=""
                 onClick={async () => {
                   if (!confirm(`Delete the project “${p.name}”?\n\nIts campaigns stay but lose the project link; project notes are removed.`)) return
                   try { await api.del(`/projects/${p.id}`); navigate('/projects') } catch (e) { alert(e.message) }
-                }} aria-label="Delete project">
+                }} aria-label={tx('Delete project')}>
                 <Trash2 size={15} />
               </button>
             )}
@@ -96,8 +96,8 @@ export default function ProjectDetail() {
             of the card with everything else in between. */}
         <div className="pc-facts">
           <span className="pc-fact">
-            <span className="pc-fact-key">Owner</span>
-            <b>{p.owner_name || <span className="pc-red">nobody — assign one</span>}</b>
+            <span className="pc-fact-key">{tx('Owner')}</span>
+            <b>{p.owner_name || <span className="pc-red">{tx('nobody — assign one')}</span>}</b>
           </span>
           {p.deadline && (() => {
             const days = Math.ceil((Date.parse(`${p.deadline}T00:00:00Z`) - Date.parse(`${todayISO()}T00:00:00Z`)) / 86400000)
@@ -130,7 +130,7 @@ export default function ProjectDetail() {
           {(p.numbers?.length > 0 || canWrite) && (
             <div className="card card-pad pc-panel">
               <div className="pc-panel-head">
-                <h3><Hash size={14} /> Numbers</h3>
+                <h3><Hash size={14} /> {tx('Numbers')}</h3>
                 {t.numbers_total > 0 && (
                   <span className={'pc-panel-count' + (t.numbers_hit === t.numbers_total ? ' met' : '')}>
                     {t.numbers_avg != null && <b>{t.numbers_avg}%</b>}
@@ -157,7 +157,7 @@ export default function ProjectDetail() {
           {(p.criteria?.length > 0 || canWrite) && (
             <div className="card card-pad pc-panel">
               <div className="pc-panel-head">
-                <h3><Target size={14} /> Success criteria</h3>
+                <h3><Target size={14} /> {tx('Success criteria')}</h3>
                 {t.criteria_total > 0 && (
                   <span className={'pc-panel-count' + (t.criteria_done === t.criteria_total ? ' met' : '')}>
                     <b>{t.criteria_pct}%</b> · {t.criteria_done} of {t.criteria_total} ticked
@@ -169,7 +169,7 @@ export default function ProjectDetail() {
                     onChange={(criteria) => patch({ criteria })} big />
                 : <button className="lnk" onClick={() => setProjModal(true)}>{tx('say what must be true at the end →')}</button>}
               {p.status !== 'done' && p.done_blockers?.length === 0 && (t.numbers_total > 0 || t.criteria_total > 0) && (
-                <div className="pc-standing-ok">Everything is met — this can be marked Done.</div>
+                <div className="pc-standing-ok">{tx('Everything is met — this can be marked Done.')}</div>
               )}
             </div>
           )}
@@ -203,8 +203,8 @@ export default function ProjectDetail() {
           const started = !p.start_date || p.start_date <= todayISO()
           const stalled = !['done', 'closed'].includes(p.status) && started && p.done_blockers?.length > 0
           return stalled
-            ? <div className="card card-pad pc-stalled">Nothing is running on this project, and it has not reached its number yet.</div>
-            : <div className="card card-pad empty">No campaigns on this project.</div>
+            ? <div className="card card-pad pc-stalled">{tx('Nothing is running on this project, and it has not reached its number yet.')}</div>
+            : <div className="card card-pad empty">{tx('No campaigns on this project.')}</div>
         })()
       ) : (
         <div className="pc-camp-list">

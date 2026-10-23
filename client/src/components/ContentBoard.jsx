@@ -163,10 +163,11 @@ export default function ContentBoard({ items, statuses, absorb = {}, ideaIds = [
               </div>
             )
           })()}
-          {/* Black and white, not ruby: on a board full of these, ruby has to
-              keep meaning "late" (r11). */}
+          {/* Tonal, not ruby: on a board full of these, ruby has to keep meaning
+              "late" (r11) — except Publish on a Ready card, the board's finish
+              line and its one ruby button (S-03). */}
           {step?.to && onStep && (
-            <button type="button" className="co-btn co-btn-o tcard-step" data-notrack
+            <button type="button" className={'co-btn tcard-step ' + (step.verb === 'Publish' ? 'co-btn-p' : 'co-btn-o')} data-notrack
               onClick={(e) => { e.stopPropagation(); onStep(item, step) }}>{tx(step.verb)}<ArrowRight size={16} aria-hidden="true" /></button>
           )}
         </div>

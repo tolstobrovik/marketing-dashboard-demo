@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Clapperboard, Send, Plus } from 'lucide-react'
-import { WEEKDAYS, MONTHS, localISO, todayISO, addDaysISO, typeInfo, onColor, statusIcon, isDeletedLabel, monthName, fixMonth } from '../lib/constants.js'
+import { WEEKDAYS, MONTHS, localISO, todayISO, addDaysISO, typeInfo, onColor, isDeletedLabel, monthName, fixMonth, fmtDay } from '../lib/constants.js'
 import { tr as tx, locale, lang } from '../lib/i18n.jsx'
-import { StageDot } from './Dot.jsx'
+import { KIND, stageKindOf, StageMark } from './CoachParts.jsx'
 import { WEEKDAYS as DAY_ABBR } from './builder/MiniCalendar.jsx'
 import { isCarried, planMonthOf, monthShortOf } from '../lib/planMonth.js'
 import { useIsPhone } from '../lib/usePhone.js'
@@ -26,7 +26,7 @@ function mondayOf(iso) {
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
   return localISO(d)
 }
-const fmtShort = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { month: 'short', day: 'numeric' })
+const fmtShort = (iso) => fmtDay(iso)
 // The same, with Chromium's "M09" put right for Uzbek (constants.js, fixMonth).
 const fmtShortSaid = (iso) => fixMonth(fmtShort(iso), Number(iso.slice(5, 7)) - 1)
 
@@ -311,9 +311,9 @@ export default function ContentCalendar({ items, mode, canMove, onMoveDate, onDa
   // phone's one-day list.
   const wkCard = (it, iso) => {
     const st = statusesById[it.status_id]
-    const TIcon = typeInfo(it.type).icon
-    const SIcon = st ? statusIcon(st.label) : null
     const dead = st ? isDeletedLabel(st.label) : false
+    // The card is its title and one stage mark (round 17): the kind of piece
+    // is in the tooltip, where it was read once at most.
     return (
       <div
         key={it.id}
@@ -324,12 +324,11 @@ export default function ContentCalendar({ items, mode, canMove, onMoveDate, onDa
         onPointerDown={(e) => startDrag(e, it)}
         onContextMenu={(e) => { if (dragId === it.id) e.preventDefault() }}
         onClick={(e) => cardClick(e, it, iso)}
-        title={`${it.title}${st ? ` · ${st.label}` : ''}`}
+        title={`${it.title} · ${typeInfo(it.type).label}${st ? ` · ${tx(st.label)}` : ''}`}
       >
         <div className="wk-title">{colorOf(it) != null && <i className="pc-dot" style={colorStyle(colorOf(it))} aria-hidden="true" />}{it.title}</div>
         <div className="wk-chips">
-          <span className={`chip ct-${it.type}`}><TIcon size={9} /> {typeInfo(it.type).label}</span>
-          {st && <StageDot status={st} icon={SIcon} />}
+          {st && <StageMark status={st} size={11} className="wk-stage" />}
           {it[timeField] && <span className="chip chip-muted"><Icon size={9} /> {it[timeField]}</span>}
           {channelsOf && <span className="chip chip-muted cal-ch">{channelsOf(it)}</span>}
         </div>
@@ -445,8 +444,9 @@ export default function ContentCalendar({ items, mode, canMove, onMoveDate, onDa
                         // work stays on the record — dimmed, struck through,
                         // its status written under the title.
                         const st = statusesById[it.status_id]
-                        const TIcon = typeInfo(it.type).icon
-                        const SIcon = st && statusIcon(st.label)
+                        // One mark, the stage's (round 17): the same icon the
+                        // rail, the task window and My Day wear for it.
+                        const SIcon = st ? KIND[stageKindOf(st.label)].Icon : typeInfo(it.type).icon
                         const dead = st ? isDeletedLabel(st.label) : false
                         // Still open from an earlier month's plan: striped in
                         // that month's colour, with its month on the pill.
@@ -469,17 +469,16 @@ export default function ContentCalendar({ items, mode, canMove, onMoveDate, onDa
                             // that ends a drag is swallowed higher up, so
                             // dropping a pill still never opens anything.
                             onClick={(e) => cardClick(e, it, iso)}
-                            title={`${it.title} · ${typeInfo(it.type).label}${st ? ` · ${st.label}` : ''}${channelsOf ? ` · ${channelsOf(it)}` : ''}`}
+                            title={`${it.title} · ${typeInfo(it.type).label}${st ? ` · ${tx(st.label)}` : ''}${channelsOf ? ` · ${channelsOf(it)}` : ''}`}
                           >
-                            <TIcon size={10} style={{ flexShrink: 0 }} />
-                            {SIcon && <SIcon size={10} style={{ flexShrink: 0, opacity: 0.75 }} />}
+                            <SIcon size={10} style={{ flexShrink: 0 }} />
                             <span className="ev-txt">
                               {it[timeField] ? `${it[timeField]} ` : ''}{it.title}
                               {/* Under the title: a killed piece's stage, or —
                                   with several channels on screen — whose
                                   account it goes out on. The tooltip said so
                                   already; a month of look-alike pills did not. */}
-                              {dead ? <i className="ev-sub">{st.label}</i> : channelsOf && <i className="ev-sub ev-ch">{channelsOf(it)}</i>}
+                              {dead ? <i className="ev-sub">{tx(st.label)}</i> : channelsOf && <i className="ev-sub ev-ch">{channelsOf(it)}</i>}
                             </span>
                           </div>
                         )

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, ExternalLink, FileText, Send, Check, Clock, ArrowRight, PenLine, CalendarClock, Plus, Hand, Undo2, UploadCloud } from 'lucide-react'
 import HandIn from './HandIn.jsx'
+import DayPick from './DayPick.jsx'
 import NextStep from './NextStep.jsx'
 import Booking from './Booking.jsx'
 import PravkaBox from './PravkaBox.jsx'
@@ -15,7 +16,7 @@ import { CopyName } from './DriveDrops.jsx'
 import { TaskFiles, DriveBox } from './DriveFiles.jsx'
 import { LinkText, LinkViewer, LinkPreview } from './LinkView.jsx'
 import {
-  KIND, Chans, Badge, Face, CrewBadge, MakerBadge, RemindButton, remindHelp, firstName, dayInLine, dayShort, hoursOf, lateWords, KindMark, ownOf,
+  KIND, Chans, Badge, Face, CrewBadge, MakerBadge, RemindButton, remindHelp, firstName, dayInLine, dayShort, hoursOf, lateWords, KindMark, ownOf, StageMark,
 } from './CoachParts.jsx'
 import { Capsule, tracks } from './CoachBits.jsx'
 import { api } from '../lib/api.js'
@@ -523,19 +524,32 @@ export default function CoachTask({
     // the focus back when it closes — so the keyboard is where the eye is.
     const opener = document.activeElement
     document.body.classList.add('co-held')
-    if (focus !== 'note') closeBtn.current?.focus({ preventScroll: true })
+    if (focus !== 'note' && focus !== 'step') closeBtn.current?.focus({ preventScroll: true })
     return () => {
       document.body.classList.remove('co-held')
       if (opener && document.contains(opener)) opener.focus?.({ preventScroll: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Opened from the start-here card (D-02): the keyboard lands on the step's
+  // first control — the drop box, the question, the button — once it is drawn.
+  useEffect(() => {
+    if (focus !== 'step' || !loaded) return undefined
+    const t = setTimeout(() => {
+      const el = panel.current?.querySelector('.co-act button:not([disabled]), .co-act input:not([disabled]), .co-act textarea:not([disabled]), .co-act [tabindex="0"]')
+      el?.focus({ preventScroll: false })
+    }, 60)
+    return () => clearTimeout(t)
+  }, [focus, loaded])
   const leave = (how) => { setLeaving(null); if (how === 'edit') setEditing(true); else if (how === 'next') onNext(); else close(true) }
   const goOut = (how) => { if (unsent()) setLeaving(how); else leave(how) }
   // Tab stays inside the window while it is open.
   const trap = (e) => {
     if (e.key !== 'Tab' || !panel.current) return
-    const stops = [...panel.current.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]')]
-      .filter((el) => el.offsetParent !== null)
+    const stops = [...panel.current.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, audio[controls], video[controls], [contenteditable="true"], [tabindex]:not([tabindex="-1"])')]
+      // What is inside a shut <details> still has a box in Chrome (content-visibility),
+      // so visibility is asked, not measured — else the last stop is one the
+      // keyboard can never reach, and Tab walks out of the window after the summary.
+      .filter((el) => (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0) && !el.closest('[hidden], [aria-hidden="true"]'))
     if (!stops.length) return
     const first = stops[0], last = stops[stops.length - 1]
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
@@ -546,9 +560,19 @@ export default function CoachTask({
   const after = (words) => <p className="co-after"><b>{tx('After you press:')}</b> {words}</p>
   const notYet = (words) => <p className="co-after co-warn"><b>{tx('Not yet.')}</b> {words}</p>
   const nothing = (words) => <p className="co-after"><b>{tx('Nothing to press.')}</b> {words}</p>
+  // The strip over the step (round 17): the stage as its mark, whose turn it
+  // is as a face, and the day — the same three marks the calendar and My Day
+  // wear, so the window is read before its words are.
+  const stop = at >= 0 ? wayOf(t, pipe, makingFor(t)).find((s) => s.cls === 'on') : null
+  const holder = stop?.who && stop.who !== user.id ? person(stop.who) : null
   const box = (title, body) => (
     <section className="co-act" aria-label={title}>
-      <div className="r14-act-h"><h3>{title}</h3>{(hat || doneHat || at >= 0) && badge}{whenLine && <span className="r14-act-when">{whenLine}</span>}</div>
+      <div className="r14-act-h">
+        <h3>{title}</h3>
+        {pipe.live[at] && <StageMark status={pipe.live[at]} />}
+        {holder && <span className="co-strip-who"><Face person={holder} size="xs" />{firstName(holder)}</span>}
+        {(hat || doneHat || at >= 0) && badge}{whenLine && <span className="r14-act-when">{whenLine}</span>}
+      </div>
       {body}
     </section>
   )
@@ -566,7 +590,7 @@ export default function CoachTask({
   const ownerName = teamName(owner)
 
   const handInAfter = () => {
-    if (!awake) return notYet(drive?.connected ? tx('Drop the file first. Then the button wakes up.') : tx('Paste the link first. Then the button wakes up.'))
+    if (!awake) return notYet(drive?.connected ? tx('Drop the file first. Then the button appears.') : tx('Paste the link first. Then the button appears.'))
     // A re-shoot is footage like any other: it goes to the editor, not back to
     // whoever asked (the bug hunt, 14 Oct 2026).
     if (act.kind === 'fix' && hat.kind !== 'shoot') return after(openRound?.requested_name ? tx('{name} gets the new version and checks it again.', { name: openRound.requested_name.split(' ')[0] }) : tx('The new version goes back to be checked again.'))
@@ -607,15 +631,15 @@ export default function CoachTask({
           <div className="co-note co-n-wait"><Clock size={20} aria-hidden="true" /><span><b>{tx('You can’t start yet.')}</b> {nameOf(t.operator_id) && shootWhen
             ? tx('{name} films it {when}. When the footage is in, this task wakes up and you can start.', { name: nameOf(t.operator_id), when: shootWhen })
             : tx('It is not filmed yet. When the footage is in, this task wakes up and you can start.')}</span></div>
-          <div className="co-btns"><button type="button" className="co-btn co-btn-p" disabled>{button}</button></div>
+          {/* T-04: no sleeping button. The sentence says what is missing; the
+              button appears the moment it can be pressed. */}
         </>
       ))
       case 'early': {
         const name = teamName(act.holder)
         return box(tx('Not your step yet'), (
           <>
-            <div className="co-note co-n-wait"><Clock size={20} aria-hidden="true" /><span><b>{tx('This one is not sent to you yet.')}</b> {tx('{name} is still planning it. When it is sent on, it moves into your list and the button wakes up.', { name })}</span></div>
-            <div className="co-btns"><button type="button" className="co-btn co-btn-p" disabled>{button}</button></div>
+            <div className="co-note co-n-wait"><Clock size={20} aria-hidden="true" /><span><b>{tx('This one is not sent to you yet.')}</b> {tx('{name} is still planning it. When it is sent on, it moves into your list and the button appears here.', { name })}</span></div>
             <div><button type="button" className="co-link" onClick={() => setAnyway(true)}>{tx('Already made it? Hand it in')}</button></div>
           </>
         ))
@@ -638,9 +662,8 @@ export default function CoachTask({
       case 'notyet': return box(tx('Not your step yet'), (
         <>
           <div className="co-note co-n-wait"><Clock size={20} aria-hidden="true" /><span>{shootWhen
-            ? tx('The shoot is {when}. On that day the button wakes up.', { when: shootWhen })
+            ? tx('The shoot is {when}. On that day the button appears here.', { when: shootWhen })
             : tx('The shoot has no day yet. When it has one, it shows here.')}</span></div>
-          <div className="co-btns"><button type="button" className="co-btn co-btn-p" disabled>{button}</button></div>
         </>
       ))
       case 'check': {
@@ -675,14 +698,16 @@ export default function CoachTask({
                   <span className="co-help">{tx('This is the last pravka — the next delivery is approved as it stands.')}</span>
                 )}
                 <div className="co-btns">
-                  <button type="button" className="co-btn co-btn-p" disabled={busy || uploading || !note.trim()} onClick={sendBack}>
-                    {tx('Send to {name}', { name: crewName(fixer) })} <ArrowRight size={18} aria-hidden="true" />
-                  </button>
+                  {note.trim() && (
+                    <button type="button" className="co-btn co-btn-p" disabled={busy || uploading} onClick={sendBack}>
+                      {tx('Send to {name}', { name: crewName(fixer) })} <ArrowRight size={18} aria-hidden="true" />
+                    </button>
+                  )}
                   <button type="button" className="co-btn co-btn-s" disabled={busy} onClick={() => setAsking(false)}>{tx('Cancel')}</button>
                 </div>
                 {note.trim()
                   ? after(`${tx('{name} gets your note and fixes it.', { name: maker })} ${tx('Then it comes back to you to check.')}`)
-                  : notYet(tx('Write what must change first. Then the button wakes up.'))}
+                  : notYet(tx('Write what must change first. Then the button appears.'))}
               </>
             ) : (
               <p className="co-after">
@@ -718,10 +743,12 @@ export default function CoachTask({
           {openRound && <div className="co-quote"><b>{tx('What to change')}</b><PravkaNote text={openRound.note} /></div>}
           <input className="input" value={fixLink} placeholder={tx('Link to the new version')} aria-label={tx('Link to the new version')}
             disabled={busy} onChange={(e) => { setFixLink(e.target.value); setErr('') }} />
-          <div className="co-btns">
-            <button type="button" className="co-btn co-btn-p" disabled={busy || !fixLink.trim()} onClick={ownFix}><Check size={18} aria-hidden="true" />{tx('Hand in the fix')}</button>
-          </div>
-          {fixLink.trim() ? after(tx('The new version goes back to be checked again.')) : notYet(tx('Paste the link first. Then the button wakes up.'))}
+          {fixLink.trim() && (
+            <div className="co-btns">
+              <button type="button" className="co-btn co-btn-p" disabled={busy} onClick={ownFix}><Check size={18} aria-hidden="true" />{tx('Hand in the fix')}</button>
+            </div>
+          )}
+          {fixLink.trim() ? after(tx('The new version goes back to be checked again.')) : notYet(tx('Paste the link first. Then the button appears.'))}
         </>
       ))
       case 'move':
@@ -730,7 +757,7 @@ export default function CoachTask({
           <NextStep inline key={`${t.id}:${act.to.id}`} item={t} to={act.to} verb={act.verb} seat={seatAt(t, pipe, makingFor(t), act.to)}
             recheck={refHeld} onAsks={(n, ok, no) => { setAsked(n); setAwake(ok); setRefused(!!no) }} onDone={apply} onCancel={() => {}} />
           {asked == null || refused ? null : !awake
-            ? notYet(act.kind === 'publish' ? tx('Paste the link to the post first. Then the button wakes up.') : tx('Fill in the boxes above first. Then the button wakes up.'))
+            ? notYet(act.kind === 'publish' ? tx('Paste the link to the post first. Then the button appears.') : tx('Fill in the boxes above first. Then the button appears.'))
             : after(act.kind === 'publish' ? tx('The task moves to Published. The team sees it is out. Nothing more to do.')
               : act.verb === 'Send to the shoot' ? tx('The person who films gets the task and says if they can come.')
                 : act.verb === 'Send to the designer' ? `${tx('The designer gets the task with your words and draws it.')} ${tx('Then it comes back to you to check.')}`
@@ -844,16 +871,16 @@ export default function CoachTask({
                 </span>
               </div>
             )}
-            {/* Whoever follows the piece across stages sees the stages line; a
-                person with one job on it reads their turn in the step below. */}
-            {at >= 0 && tracks(user, t) ? (
-              <Capsule t={t} pipe={pipe} making={makingFor(t)} userId={user.id} person={person} />
+            {/* The piece as its line of stops (round 18), for everybody: the lit
+                stop says whose turn it is before the step below says so. */}
+            {at >= 0 ? (
+              <Capsule t={t} pipe={pipe} making={makingFor(t)} userId={user.id} person={person} today={today} />
             ) : null}
             </>)}
           </div>
           <div className="co-p-acts">
             {canEditIt && !editing && (
-              <button type="button" className="co-btn co-btn-s co-btn-sm co-edit-btn" onClick={() => goOut('edit')} aria-label={tx('Edit')}><PenLine size={16} aria-hidden="true" /><span>{tx('Edit')}</span></button>
+              <button type="button" className="co-btn co-btn-q co-btn-sm co-edit-btn" onClick={() => goOut('edit')} aria-label={tx('Edit')}><PenLine size={16} aria-hidden="true" /><span>{tx('Edit')}</span></button>
             )}
             <button type="button" className="co-x" ref={closeBtn} onClick={() => close()} aria-label={editing ? tx('Cancel') : tx('Close the task')}><X size={18} aria-hidden="true" /></button>
           </div>
@@ -1086,7 +1113,7 @@ function MoveDay({ task, field, today, onMoved }) {
   return (
     <div className="co-late-form co-move-form">
       <label className="co-lbl">{tx('New day')}
-        <input className="input" type="date" min={today} value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+        <DayPick value={form.to} min={today} label={tx('New day')} onChange={(d) => setForm({ ...form, to: d })} />
       </label>
       <input className="input" value={form.reason} placeholder={tx('Why, in one line — e.g. “the footage came in late”')}
         aria-label={tx('Why the day moves')} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
@@ -1155,7 +1182,7 @@ function LateHelp({ taskId, phase, today, onMoved }) {
     <div className="co-late-form">
       {form.kind === 'day' && (
         <label className="co-lbl">{tx('New day')}
-          <input className="input" type="date" min={today} value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+          <DayPick value={form.to} min={today} label={tx('New day')} onChange={(d) => setForm({ ...form, to: d })} />
         </label>
       )}
       <textarea className="input" rows={2} autoFocus value={form.reason}

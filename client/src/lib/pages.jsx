@@ -53,7 +53,10 @@ export function PagesProvider({ children }) {
     // An ambassador is refused everything outside their own page (server/auth.js):
     // asking was a 403 on every page load.
     if (!user || user.role === 'ambassador') return
-    api.get('/fields').then((f) => {
+    // Asked again on a widening wait when the answer does not come (S-08):
+    // the page rules decide which doors are drawn, and one failed load after
+    // a restart used to leave them at whatever the cache last said.
+    api.cached('/fields').then((f) => {
       const p = asObj(f?.pages)
       setPages(p)
       cache.set('page_rules', p)

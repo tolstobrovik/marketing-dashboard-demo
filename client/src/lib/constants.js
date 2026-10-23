@@ -287,12 +287,28 @@ export function dateLabel(iso) {
   if (iso === t) return tx('Today')
   if (iso === addDaysISO(t, 1)) return tx('Tomorrow')
   if (iso === addDaysISO(t, -1)) return tx('Yesterday')
-  // NOT routed through fixMonth() yet, deliberately. Doing that fixes the
-  // Uzbek month here and in the eighteen other files that share this
-  // formatter, which is a change that belongs in the sweep that also fixes
-  // the twenty places formatting a month on their own — not in a pull
-  // request about projects. Until then a date still reads "M09 30" in Uzbek.
-  return new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { month: 'short', day: 'numeric' })
+  return fmtDay(iso)
+}
+
+// ---- the one day format (S-06) -------------------------------------------------
+// The same task read "пт 6 нояб." on a row, "2026-11-06" under Deadlines,
+// "11/06/2026" in Edit and "Fri 6 Nov" in English. Every screen says a day
+// this way now: the weekday, the day, the short month — "Fri 6 Nov",
+// "пт, 6 нояб.", "jum, 6-noy" — and the year only when it is not this year.
+// English and Russian are the browser's own; Uzbek is put together here,
+// because Chromium has no Latin-Uzbek calendar names (see fixMonth).
+const UZ_DAYS_SHORT = ['yak', 'dush', 'sesh', 'chor', 'pay', 'jum', 'shan'] // Sunday first, like getUTCDay()
+export function fmtDay(iso, { weekday = true, year = 'auto' } = {}) {
+  if (!iso) return ''
+  const d = new Date(`${String(iso).slice(0, 10)}T12:00:00Z`)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  const withYear = year === true || (year === 'auto' && d.getUTCFullYear() !== Number(todayISO().slice(0, 4)))
+  if (lang() === 'uz') {
+    return `${weekday ? `${UZ_DAYS_SHORT[d.getUTCDay()]}, ` : ''}${d.getUTCDate()}-${UZ_MONTHS_SHORT[d.getUTCMonth()].toLowerCase()}${withYear ? ` ${d.getUTCFullYear()}` : ''}`
+  }
+  return d.toLocaleDateString(locale(), {
+    ...(weekday ? { weekday: 'short' } : {}), day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC',
+  })
 }
 
 // Distinct solid colors for departments — the admin overview and timeline

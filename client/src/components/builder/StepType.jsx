@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Shapes } from 'lucide-react'
 import { typeInfo, iconFor } from '../../lib/constants.js'
 import { tr as tx } from '../../lib/i18n.jsx'
@@ -26,6 +26,37 @@ export const USUAL = {
   ads: ['reel', 'target', 'post'],
   video: ['video', 'reel'],
   text: ['post'],
+}
+
+// The same kinds as one row of pills, on the Idea step (23 Oct 2026: the
+// owner wanted the kind beside the name, with the channel's usual kind
+// already chosen). The channel's usual kinds, then "Something else".
+export function KindPills({ type, format, onPick }) {
+  const [more, setMore] = useState(false)
+  const usual = USUAL[format] || USUAL.social
+  const big = KINDS.filter((k) => usual.includes(k.key) || k.key === type)
+  const shown = more ? KINDS : big
+  return (
+    <div className="tb-where">
+      <span className="tb-where-label"><Shapes size={14} /> {tx('What kind is it?')}</span>
+      <div className="tb-pills" role="radiogroup" aria-label={tx('What kind is it?')}>
+        {shown.map((k) => {
+          const info = typeInfo(k.key)
+          const Icon = info.icon
+          const on = type === k.key
+          return (
+            <button key={k.key} type="button" role="radio" aria-checked={on} data-kind={k.key}
+              className={'tb-pill' + (on ? ' on' : '')} onClick={() => onPick(k.key)}>
+              <Icon size={14} /> {tx(info.label)}
+            </button>
+          )
+        })}
+        {!more && shown.length < KINDS.length && (
+          <button type="button" className="tb-pill" onClick={() => setMore(true)}>{tx('Something else')}</button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function StepType({ type, onPick, channel, channels, onChannel, format }) {
@@ -76,7 +107,7 @@ export default function StepType({ type, onPick, channel, channels, onChannel, f
           const Icon = info.icon
           const on = type === k.key
           return (
-            <button key={k.key} type="button" role="radio" aria-checked={on} data-kind={k.key}
+            <button key={k.key} type="button" role="radio" aria-checked={on} data-kind={k.key} aria-label={tx(info.label)}
               className={'tb-kind' + (on ? ' on' : '')} onClick={() => onPick(k.key)}>
               <span className="tb-kind-icon"><Icon size={22} /></span>
               <b>{tx(info.label)}</b>

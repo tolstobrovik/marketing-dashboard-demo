@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Clapperboard, Scissors, AlertTriangle, ChevronRight, ChevronDown, Check } from 'lucide-react'
-import { addDaysISO, dateLabel } from '../lib/constants.js'
+import { addDaysISO, dateLabel, fmtDay } from '../lib/constants.js'
 import { tr as tx, locale } from '../lib/i18n.jsx'
 
 // ---- Post Production, on a phone -------------------------------------------
@@ -27,7 +27,7 @@ const SHOT_STAGE = /shot|edit|ready|publish|post|got/i
 const dayWord = (iso, today) => {
   if (iso === today) return tx('Today')
   if (iso === addDaysISO(today, 1)) return tx('Tomorrow')
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
+  return fmtDay(iso)
 }
 
 export default function CrewAgenda({ crew, content, statuses, today, byKey, onOpen }) {

@@ -10,10 +10,10 @@ import { tr } from '../lib/i18n.jsx'
 export function StageDot({ status, icon: Icon }) {
   if (!status) return null
   return (
-    <span className="sdot" title={status.label}>
+    <span className="sdot" title={tr(status.label)}>
       <i style={{ background: status.color }} />
       {Icon ? <Icon size={9} /> : null}
-      <span>{status.label}</span>
+      <span>{tr(status.label)}</span>
     </span>
   )
 }
@@ -23,8 +23,8 @@ export function StageLegend({ statusesById }) {
   const stages = Object.values(statusesById || {}).filter((s) => s && !/^deleted$/i.test(s.label || '')).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
   if (stages.length < 2) return null
   return (
-    <div className="cal-legend" aria-label="Legend">
-      {stages.map((s) => <span key={s.id} className="chip st-legend"><i className="dot" style={{ background: s.color }} />{s.label}</span>)}
+    <div className="cal-legend" aria-label={tr('Legend')}>
+      {stages.map((s) => <span key={s.id} className="chip st-legend"><i className="dot" style={{ background: s.color }} />{tr(s.label)}</span>)}
     </div>
   )
 }

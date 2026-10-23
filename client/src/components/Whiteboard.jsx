@@ -7,6 +7,7 @@ import { useContextMenu } from './ContextMenu.jsx'
 import Modal from './Modal.jsx'
 import RichNote from './RichNote.jsx'
 import { Rich } from '../lib/richtext.js'
+import { tr as tx } from '../lib/i18n.jsx'
 
 // Whiteboard: free-form canvas for the org structure. Each card is a role;
 // bind a team member to it (their live name and photo render on the card),
@@ -38,9 +39,9 @@ const Node = memo(function Node({ n, bound, linkFrom, register, onDown, onMenu, 
       onContextMenu={(e) => onMenu(e, n)}
     >
       <div className="bn-tools" onPointerDown={(e) => e.stopPropagation()}>
-        <button className="icon-btn" onClick={() => onLink(n.id)} data-tip="Connect to another card" aria-label="Link"><Link2 size={13} /></button>
-        <button className="icon-btn" onClick={() => onEdit(n)} data-tip="Edit role & member" aria-label="Edit"><Pencil size={13} /></button>
-        <button className="icon-btn del-btn" onClick={() => onDelete(n)} data-tip="Delete this card" data-tip-left="" aria-label="Delete"><Trash2 size={13} /></button>
+        <button className="icon-btn" onClick={() => onLink(n.id)} data-tip={tx('Connect to another card')} aria-label={tx('Link')}><Link2 size={13} /></button>
+        <button className="icon-btn" onClick={() => onEdit(n)} data-tip={tx('Edit role & member')} aria-label="Edit"><Pencil size={13} /></button>
+        <button className="icon-btn del-btn" onClick={() => onDelete(n)} data-tip={tx('Delete this card')} data-tip-left="" aria-label={tx('Delete')}><Trash2 size={13} /></button>
       </div>
       <div className="bn-title">{n.text || 'Role'}</div>
       {bound ? (
@@ -49,7 +50,7 @@ const Node = memo(function Node({ n, bound, linkFrom, register, onDown, onMenu, 
           <span>{bound.name}</span>
         </div>
       ) : (
-        <div className="bn-empty"><UserRound size={11} /> No one assigned</div>
+        <div className="bn-empty"><UserRound size={11} /> {tx('No one assigned')}</div>
       )}
       {n.sub && <Rich text={n.sub} className="bn-rich" />}
     </div>
@@ -439,27 +440,27 @@ export default function Whiteboard() {
         {boards.map((b) => (
           <button key={b.id} className={'pill' + (b.id === board.id ? ' active' : '')} onClick={() => openBoard(b.id)}>{b.name}</button>
         ))}
-        <button className="pill" onClick={newBoard}><Plus size={13} /> New board</button>
+        <button className="pill" onClick={newBoard}><Plus size={13} /> {tx('New board')}</button>
         <span style={{ flex: 1 }} />
-        {saved && <span className="save-ok"><Check size={14} /> Saved</span>}
-        <button className="icon-btn" onClick={renameBoard} data-tip="Rename this board" aria-label="Rename board"><Pencil size={15} /></button>
-        <button className="icon-btn del-btn" onClick={deleteBoard} data-tip="Delete this board" aria-label="Delete board"><Trash2 size={15} /></button>
+        {saved && <span className="save-ok"><Check size={14} /> {tx('Saved')}</span>}
+        <button className="icon-btn" onClick={renameBoard} data-tip={tx('Rename this board')} aria-label={tx('Rename board')}><Pencil size={15} /></button>
+        <button className="icon-btn del-btn" onClick={deleteBoard} data-tip={tx('Delete this board')} aria-label={tx('Delete board')}><Trash2 size={15} /></button>
         <span className="zoom-ctl">
-          <button className="icon-btn" onClick={() => setZoom(zoom - 0.1)} data-tip="Zoom out — see more of the field" aria-label="Zoom out"><ZoomOut size={15} /></button>
-          <button className="zoom-pct" onClick={() => setZoom(1)} data-tip="Back to 100%">{Math.round(zoom * 100)}%</button>
-          <button className="icon-btn" onClick={() => setZoom(zoom + 0.1)} data-tip="Zoom in — work close up" aria-label="Zoom in"><ZoomIn size={15} /></button>
+          <button className="icon-btn" onClick={() => setZoom(zoom - 0.1)} data-tip={tx('Zoom out — see more of the field')} aria-label={tx('Zoom out')}><ZoomOut size={15} /></button>
+          <button className="zoom-pct" onClick={() => setZoom(1)} data-tip={tx('Back to 100%')}>{Math.round(zoom * 100)}%</button>
+          <button className="icon-btn" onClick={() => setZoom(zoom + 0.1)} data-tip={tx('Zoom in — work close up')} aria-label={tx('Zoom in')}><ZoomIn size={15} /></button>
         </span>
         <button className="icon-btn" onClick={() => setFs(!fs)}
-          data-tip={fs ? 'Exit full screen (Esc)' : 'Full screen — the whole display for the board'} aria-label="Full screen">
+          data-tip={fs ? 'Exit full screen (Esc)' : 'Full screen — the whole display for the board'} aria-label={tx('Full screen')}>
           {fs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
-        <button className="btn btn-primary btn-sm" onClick={addNode}><Plus size={15} /> Add role</button>
+        <button className="btn btn-primary btn-sm" onClick={addNode}><Plus size={15} /> {tx('Add role')}</button>
       </div>
 
       {linkFrom ? (
-        <div className="link-banner"><Link2 size={14} /> Click another card to connect it — Esc to cancel</div>
+        <div className="link-banner"><Link2 size={14} /> {tx('Click another card to connect it — Esc to cancel')}</div>
       ) : (
-        <div className="board-hint">Drag the empty field to move around · double-click it to add a role there · ⌘/Ctrl + scroll to zoom · click a card to edit it</div>
+        <div className="board-hint">{tx('Drag the empty field to move around · double-click it to add a role there · ⌘/Ctrl + scroll to zoom · click a card to edit it')}</div>
       )}
 
       <div className={'board-canvas' + (panning ? ' panning' : '')} ref={canvasRef}
@@ -517,28 +518,28 @@ function NodeModal({ node, team, onClose, onSave, onDelete }) {
   const [form, setForm] = useState({ ...node })
   return (
     <Modal
-      title="Role"
+      title={tx('Role')}
       onClose={onClose}
       footer={<>
-        <button className="btn btn-danger" onClick={() => { if (confirm(`Delete “${node.text}”?`)) onDelete() }}><Trash2 size={15} /> Delete</button>
+        <button className="btn btn-danger" onClick={() => { if (confirm(`Delete “${node.text}”?`)) onDelete() }}><Trash2 size={15} /> {tx('Delete')}</button>
         <span className="foot-gap" />
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={() => onSave({ ...form, text: form.text.trim() || 'Role' })}>Save</button>
+        <button className="btn" onClick={onClose}>{tx('Cancel')}</button>
+        <button className="btn btn-primary" onClick={() => onSave({ ...form, text: form.text.trim() || 'Role' })}>{tx('Save')}</button>
       </>}
     >
       <div className="field">
-        <label>Role / position</label>
-        <input className="input" autoFocus value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} placeholder="e.g. Head of SMM" />
+        <label>{tx('Role / position')}</label>
+        <input className="input" autoFocus value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} placeholder={tx('e.g. Head of SMM')} />
       </div>
       <div className="field">
-        <label>Team member</label>
+        <label>{tx('Team member')}</label>
         <select className="select" value={form.user_id ?? ''} onChange={(e) => setForm({ ...form, user_id: e.target.value === '' ? null : Number(e.target.value) })}>
-          <option value="">— Nobody yet —</option>
+          <option value="">{tx('— Nobody yet —')}</option>
           {team.map((u) => <option key={u.id} value={u.id}>{u.name}{u.role === 'admin' ? ' (admin)' : ''}</option>)}
         </select>
       </div>
       <div className="field">
-        <label>Details <span className="stat-sub">(what they own, what they are measured on, notes)</span></label>
+        <label>{tx('Details')} <span className="stat-sub">{tx('(what they own, what they are measured on, notes)')}</span></label>
         <RichNote
           value={form.sub}
           onChange={(sub) => setForm((f) => ({ ...f, sub }))}
@@ -546,7 +547,7 @@ function NodeModal({ node, team, onClose, onSave, onDelete }) {
         />
       </div>
       <div className="field">
-        <label>Card color</label>
+        <label>{tx('Card color')}</label>
         <div className="swatch-row">
           {COLORS.map((c) => (
             <button key={c} type="button" className={'swatch' + (form.color === c ? ' on' : '')} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} aria-label={c}>

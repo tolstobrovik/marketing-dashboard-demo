@@ -16,7 +16,7 @@ import { useAuth, reachOf } from '../lib/auth.jsx'
 import { useIsPhone } from '../lib/usePhone.js'
 import Booking from './Booking.jsx'
 import Timetable from './Timetable.jsx'
-import { api } from '../lib/api.js'
+import { api, cache } from '../lib/api.js'
 import { getPicks, bumpPick } from '../lib/picks.js'
 import { gapsOf, stageRankOf, datesFrozenAt } from '../lib/gaps.js'
 import { askedOf } from '../lib/channelFormat.js'
@@ -133,7 +133,7 @@ function DateRow({ icon: Icon, label, dateKey, timeKey, endKey, form, setForm, d
       {endKey && (
         <>
           <span className="drow-dash">–</span>
-          <input className="input" type="time" disabled={disabled} value={form[endKey]} data-tip="To" step={1800}
+          <input className="input" type="time" disabled={disabled} value={form[endKey]} data-tip={tx('To')} step={1800}
             onChange={(e) => { typed.current[endKey] = true; setForm({ ...form, [endKey]: e.target.value }) }}
             onBlur={snapTyped(endKey, true)} />
         </>
@@ -391,9 +391,11 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
   useEffect(() => { if (closeRef) closeRef.current = tryClose })
   // Team list: the admin's assignee picker + the video crew pickers.
   // (cached — every modal open reuses one fetch for a while)
-  const [team, setTeam] = useState([])
+  // T-06: the sheet opens with the last roster this browser saw, so a name
+  // is never drawn as "…" and the crew row does not jump when /users answers.
+  const [team, setTeam] = useState(() => { const c = cache.get('users'); return Array.isArray(c) ? c : [] })
   useEffect(() => {
-    api.cached('/users').then(setTeam).catch(() => {})
+    api.cached('/users').then((list) => { if (Array.isArray(list)) { setTeam(list); cache.set('users', list) } }).catch(() => {})
   }, [])
   // The people you pick most rise to the top of every assign list.
   const picks = useMemo(() => getPicks(), [])
@@ -1307,12 +1309,12 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
           <div className="brief-fields">
             {fOn('format') && (
               <label className={'brief-field' + (badField === 'format' ? ' field-bad' : '')} data-field="format">
-                <span className="brief-label"><Layers size={12} /> Format {fReq('format')
+                <span className="brief-label"><Layers size={12} /> {tx('Format')} {fReq('format')
                   ? <b className="req-star" data-tip={tx("The admin made this required")}>*</b>
                   : <span className="crew-opt">{tx("optional")}</span>}</span>
                 <select className="select" disabled={detailsLocked} value={form.format}
                   onChange={(e) => setForm({ ...form, format: e.target.value })}>
-                  <option value="">— pick a format —</option>
+                  <option value="">{tx('— pick a format —')}</option>
                   {[...new Set([...(fieldRules.format.options || []), ...(form.format ? [form.format] : [])])]
                     .map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -1320,13 +1322,13 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
             )}
             {fOn('rubrika') && (
               <label className={'brief-field' + (badField === 'rubrika' ? ' field-bad' : '')} data-field="rubrika">
-                <span className="brief-label"><Hash size={12} /> Rubrika {fReq('rubrika')
+                <span className="brief-label"><Hash size={12} /> {tx('Rubrika')} {fReq('rubrika')
                   ? <b className="req-star" data-tip={tx("The admin made this required")}>*</b>
                   : <span className="crew-opt">{tx("optional")}</span>}</span>
                 {(fieldRules.rubrika.options || []).length > 0 ? (
                   <select className="select" disabled={detailsLocked} value={form.rubrika}
                     onChange={(e) => setForm({ ...form, rubrika: e.target.value })}>
-                    <option value="">— pick a rubrika —</option>
+                    <option value="">{tx('— pick a rubrika —')}</option>
                     {[...new Set([...(fieldRules.rubrika.options || []), ...(form.rubrika ? [form.rubrika] : [])])]
                       .map((o) => <option key={o} value={o}>{o}</option>)}
                   </select>
@@ -1477,7 +1479,7 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
               <div className="ref-links">
                 {form.reference_links.map((url, i) => (
                   <div key={i} className="ref-link-row">
-                    <input className="input" value={url} placeholder="https://… reference video or post"
+                    <input className="input" value={url} placeholder={tx('https://… reference video or post')}
                       onChange={(e) => setRefLink(i, e.target.value)} />
                     <button type="button" className="icon-btn" aria-label={tx("Remove link")} onClick={() => removeRefLink(i)}><X size={13} /></button>
                   </div>
@@ -1508,7 +1510,7 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
               <div className="ref-photo-album">
                 {form.reference_photos.map((p, i) => (
                   <div className="photo-wrap ref-photo" key={i}>
-                    <Zoom src={p.thumb || p.photo} full={p.photo || p.thumb} alt="reference" />
+                    <Zoom src={p.thumb || p.photo} full={p.photo || p.thumb} alt={tx('reference')} />
                     {briefEditable && (
                       <button className="photo-remove" data-tip={tx("Remove the photo")} data-tip-left=""
                         onClick={() => setPhotos(form.reference_photos.filter((_, j) => j !== i))}
@@ -1714,7 +1716,7 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
                         value={form[f.file] || ''}
                         onChange={(e) => setForm({ ...form, [f.file]: e.target.value })} />
                     ) : (
-                      <input className="input" placeholder="https://drive.google.com/…"
+                      <input className="input" placeholder={'https://drive.google.com/…'}
                         disabled={!editable}
                         value={form[f.col]}
                         onChange={(e) => setForm({ ...form, [f.col]: e.target.value })} />
@@ -1996,8 +1998,8 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
                   const u = team.find((x) => x.id === id)
                   return (
                     <span key={id} className="chip assignee-chip">
-                      <Avatar name={u?.name || '…'} color={u?.color} src={u?.avatar} size="xs" />
-                      {u?.name || '…'}
+                      <Avatar name={u?.name || tx('Someone')} color={u?.color} src={u?.avatar} size="xs" />
+                      {u?.name || tx('Someone')}
                       {!detailsLocked && (
                         <button type="button" className="chip-x" aria-label={tx('Remove')}
                           onClick={() => setForm({ ...form, face_ids: form.face_ids.filter((x) => x !== id) })}>×</button>
@@ -2059,7 +2061,7 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
             <CalendarClock size={15} /> {tx('Ask an admin to move {day}', { day: promisedDay(asking.field) })}
           </div>
           <div className="ask-row">
-            <span className="ask-was">now <b>{item?.[asking.field] || '—'}</b></span>
+            <span className="ask-was">{tx('now')} <b>{item?.[asking.field] || '—'}</b></span>
             <span className="drow-dash">→</span>
             <input className="input" type="date" value={asking.to}
               onChange={(e) => setAsking({ ...asking, to: e.target.value })} />
@@ -2127,7 +2129,7 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
               const u = team.find((x) => x.id === id)
               return (
                 <span key={id} className="chip assignee-chip">
-                  {u?.name || '…'}
+                  {u?.name || tx('Someone')}
                   <button type="button" className="chip-x" aria-label={tx("Remove")}
                     onClick={() => setForm({ ...form, assignee_ids: form.assignee_ids.filter((x) => x !== id) })}>×</button>
                 </span>
@@ -2169,8 +2171,8 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
             const u = team.find((x) => x.id === id)
             return (
               <span key={id} className="chip assignee-chip">
-                <Avatar name={u?.name || '…'} color={u?.color} src={u?.avatar} size="xs" />
-                {u?.name || '…'}
+                <Avatar name={u?.name || tx('Someone')} color={u?.color} src={u?.avatar} size="xs" />
+                {u?.name || tx('Someone')}
                 {!detailsLocked && (
                   <button type="button" className="chip-x" aria-label={tx('Remove')}
                     onClick={() => setForm({ ...form, reviewer_ids: form.reviewer_ids.filter((x) => x !== id) })}>×</button>
@@ -2313,7 +2315,7 @@ function TaskSheet({ item, statuses, defaults = {}, onClose, onCreate, onUpdate,
       </div>
     </>)}
     <span className="foot-gap foot-gap-tight" />
-    <button className="btn" onClick={() => { dropDraft(); onClose() }}>{tx("Cancel")}</button>
+    <button className="btn btn-ghost" onClick={() => { dropDraft(); onClose() }}>{tx("Cancel")}</button>
     <button className="btn btn-primary" onClick={() => save()} disabled={busy || !form.title.trim()}>
       {busy ? t('task.saving') : creating ? t('task.create') : t('task.savechanges')}
     </button>

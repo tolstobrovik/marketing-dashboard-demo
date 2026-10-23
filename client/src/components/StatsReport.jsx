@@ -421,7 +421,7 @@ export default function StatsReport({ onOpenPiece }) {
 
           {/* ---- month by month ---- */}
           {!(periodEmpty && monthsQuiet) && (
-          <Section id="months" title="Month by month" open={open.has('months')} onToggle={toggle}
+          <Section id="months" title={tx('Month by month')} open={open.has('months')} onToggle={toggle}
             sub={tx('Click a month to open it')}>
             <MonthBars months={data.months} selected={mode === 'month' ? month : null}
               onPick={(m) => { setMode('month'); setMonth(m) }} />
@@ -452,7 +452,7 @@ export default function StatsReport({ onOpenPiece }) {
           )}
 
           {/* ---- where the time goes ---- */}
-          <Section id="steps" title="Where the time goes" open={open.has('steps')} onToggle={toggle}
+          <Section id="steps" title={tx('Where the time goes')} open={open.has('steps')} onToggle={toggle}
             sub={tx('Steps whose own day fell in this window')}>
             <div className="st-steps">
               {steps.by_step.filter((s) => s.due || s.open).map((s) => {
@@ -483,7 +483,7 @@ export default function StatsReport({ onOpenPiece }) {
           </Section>
 
           {/* ---- by channel ---- */}
-          <Section id="channels" title="By channel" count={data.channels.length} open={open.has('channels')} onToggle={toggle}>
+          <Section id="channels" title={tx('By channel')} count={data.channels.length} open={open.has('channels')} onToggle={toggle}>
             <div className="tbl-wrap">
               <table className="tbl st-tbl">
                 <thead><tr>
@@ -512,7 +512,7 @@ export default function StatsReport({ onOpenPiece }) {
 
           {/* ---- the people ---- */}
           {data.people.length > 0 && (
-            <Section id="people" title="Who did what" count={data.people.length} open={open.has('people')} onToggle={toggle}
+            <Section id="people" title={tx('Who did what')} count={data.people.length} open={open.has('people')} onToggle={toggle}
               sub={tx('What each person finished, beside what they missed')}>
               <div className="tbl-wrap">
                 <table className="tbl st-tbl">
@@ -540,7 +540,7 @@ export default function StatsReport({ onOpenPiece }) {
           )}
 
           {/* ---- what got watched ---- */}
-          <Section id="reach" title="What got watched" open={open.has('reach')} onToggle={toggle}
+          <Section id="reach" title={tx('What got watched')} open={open.has('reach')} onToggle={toggle}
             sub={p.views_counted ? n0(p.views) : tx('nothing counted yet')}>
             {p.views_counted === 0 ? (
               <p className="stat-sub">
@@ -573,7 +573,7 @@ export default function StatsReport({ onOpenPiece }) {
 
           {/* ---- every missed step ---- */}
           {data.misses.length > 0 && (
-            <Section id="each" title="Every missed step, worst first" count={data.misses_total ?? data.misses.length}
+            <Section id="each" title={tx('Every missed step, worst first')} count={data.misses_total ?? data.misses.length}
               open={open.has('each')} onToggle={toggle}>
               <div className="st-misses">
                 {data.misses.map((m, i) => (
@@ -598,7 +598,7 @@ export default function StatsReport({ onOpenPiece }) {
           )}
 
           {/* ---- and what the words mean ---- */}
-          <Section id="how" title="How these are counted" open={open.has('how')} onToggle={toggle}
+          <Section id="how" title={tx('How these are counted')} open={open.has('how')} onToggle={toggle}
             sub={<><HelpCircle size={13} /> {tx('the whole vocabulary, in six lines')}</>}>
             <dl className="st-gloss">
               <dt>{tx('A piece')}</dt>

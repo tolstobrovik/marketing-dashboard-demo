@@ -87,12 +87,12 @@ export default function CampaignForm({ campaign, projects, team, metrics, defaul
       title={creating ? tx('New campaign') : tx('Campaign')}
       onClose={onClose}
       footer={<>
-        {!creating && isAdmin && <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> Delete</button>}
+        {!creating && isAdmin && <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> {tx('Delete')}</button>}
         <span className="foot-gap" />
-        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn" onClick={onClose}>{tx('Cancel')}</button>
         {(creating || campaign?.status === 'idea') && (
           <button className="btn" onClick={() => save('idea')} disabled={busy}
-            data-tip="Keeps the gaps — lands in the Idea column">Save as Idea</button>
+            data-tip={tx('Keeps the gaps — lands in the Idea column')}>{tx('Save as Idea')}</button>
         )}
         <button className="btn btn-primary" onClick={() => save(creating || campaign?.status === 'idea' ? 'accepted' : undefined)} disabled={busy}
           data-tip={creating || campaign?.status === 'idea' ? 'Refuses until all eight required fields are filled' : 'Save changes'}>
@@ -102,37 +102,37 @@ export default function CampaignForm({ campaign, projects, team, metrics, defaul
     >
       {err && <div className="pc-strip" style={{ marginBottom: 10 }}><AlertCircle size={14} /> {err}</div>}
 
-      <div className="field"><label>Name</label>
+      <div className="field"><label>{tx('Name')}</label>
         <input className="input" autoFocus={creating} style={gap('name')} value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Admissions Hype — July" />
+          onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={tx('e.g. Admissions Hype — July')} />
       </div>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <div className="field"><label>Project <span className="stat-sub">— exactly one</span></label>
+        <div className="field"><label>{tx('Project')} <span className="stat-sub">{tx('— exactly one')}</span></label>
           <select className="select" style={gap('project')} value={form.project_id}
             onChange={(e) => setForm({ ...form, project_id: e.target.value === '' ? '' : Number(e.target.value) })}>
-            <option value="">— pick a project —</option>
+            <option value="">{tx('— pick a project —')}</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
-        <div className="field"><label>Owner <span className="stat-sub">— one person, not a group</span></label>
+        <div className="field"><label>{tx('Owner')} <span className="stat-sub">{tx('— one person, not a group')}</span></label>
           <select className="select" style={gap('owner')} value={form.owner_id}
             onChange={(e) => setForm({ ...form, owner_id: e.target.value === '' ? '' : Number(e.target.value) })}>
-            <option value="">— pick an owner —</option>
+            <option value="">{tx('— pick an owner —')}</option>
             {ownerOptions(team).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
         </div>
       </div>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <div className="field"><label>Start</label>
+        <div className="field"><label>{tx('Start')}</label>
           <input className="input" type="date" style={gap('start date')} value={form.start_date}
             onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
         </div>
-        <div className="field"><label>End</label>
+        <div className="field"><label>{tx('End')}</label>
           <input className="input" type="date" style={gap('end date')} value={form.end_date}
             onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
         </div>
       </div>
-      <div className="field"><label>Channels</label>
+      <div className="field"><label>{tx('Channels')}</label>
         <div className="checkbox-row" style={gap('channels') ? { ...gap('channels'), borderRadius: 8, padding: 4 } : undefined}>
           {channels.map((c) => (
             <label key={c.key} className={'checkbox-chip chip-sm' + (form.channels.includes(c.key) ? ' on' : '')}>
@@ -143,10 +143,10 @@ export default function CampaignForm({ campaign, projects, team, metrics, defaul
         </div>
       </div>
       <div className="grid grid-3" style={{ gap: 12 }}>
-        <div className="field"><label>Primary metric <span className="stat-sub">— one</span></label>
+        <div className="field"><label>{tx('Primary metric')} <span className="stat-sub">{tx('— one')}</span></label>
           <select className="select" style={gap('primary metric')} value={form.metric}
             onChange={(e) => setForm({ ...form, metric: e.target.value })}>
-            <option value="">— pick one —</option>
+            <option value="">{tx('— pick one —')}</option>
             {metrics.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
@@ -154,18 +154,18 @@ export default function CampaignForm({ campaign, projects, team, metrics, defaul
           <input className="input" type="number" min="0" style={gap('target')} value={form.target}
             onChange={(e) => setForm({ ...form, target: e.target.value })} placeholder="e.g. 1000" />
         </div>
-        <div className="field"><label>Budget <span className="stat-sub">(optional)</span></label>
+        <div className="field"><label>{tx('Budget')} <span className="stat-sub">{tx('(optional)')}</span></label>
           <input className="input" type="number" min="0" value={form.budget}
             onChange={(e) => setForm({ ...form, budget: e.target.value })} />
         </div>
       </div>
-      <div className="field"><label>Goal <span className="stat-sub">(optional, one line)</span></label>
-        <input className="input" value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="What winning looks like" />
+      <div className="field"><label>{tx('Goal')} <span className="stat-sub">{tx('(optional, one line)')}</span></label>
+        <input className="input" value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder={tx('What winning looks like')} />
       </div>
-      <div className="field"><label>Description <span className="stat-sub">(optional)</span></label>
+      <div className="field"><label>{tx('Description')} <span className="stat-sub">{tx('(optional)')}</span></label>
         <textarea className="input" rows={3} value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
-          placeholder="What this push is, references, context…" />
+          placeholder={tx('What this push is, references, context…')} />
       </div>
       {/* Launch checklist — the admin's to-do for this campaign. Items are
           click-to-edit; an overdue unticked step will set the campaign to

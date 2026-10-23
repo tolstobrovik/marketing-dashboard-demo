@@ -4,6 +4,7 @@ import TimeBand from './TimeBand.jsx'
 import { Face, dayShort } from './CoachParts.jsx'
 import { addDays } from '../lib/coach.js'
 import Modal from './Modal.jsx'
+import DayPick, { TimePick } from './DayPick.jsx'
 import { useClash } from './ClashDialog.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
@@ -252,7 +253,10 @@ export default function NextStep({ item, to, verb = '', title: given = '', quiet
     return inline ? checking : <Modal title={title} onClose={onCancel}>{checking}</Modal>
   }
 
-  const button = (
+  // T-04: inline, under "Your step now", the button is drawn once every box
+  // is filled — the window's line says what is missing until then. The panel
+  // at a board card keeps a sleeping button: its questions are the whole panel.
+  const button = (inline && !ready && !busy) ? null : (
     <button type="button" className={ask ? 'co-btn co-btn-p st-go' : 'btn btn-primary st-go'} disabled={busy || !ready} onClick={() => go()}>
       {busy ? tx('Saving…') : title}
     </button>
@@ -350,14 +354,13 @@ export default function NextStep({ item, to, verb = '', title: given = '', quiet
           </span>
         )}
         {spec.kind === 'date' && (
-          <input id={id} className="input" type="date" min={today} value={v} disabled={busy} aria-label={steps ? tx('Another day') : undefined} onChange={(e) => set(a.field, e.target.value)} />
+          <DayPick id={id} value={v} min={today} disabled={busy} label={steps ? tx('Another day') : tx(spec.q)} placeholder={steps ? tx('Another day') : ''} onChange={(d) => set(a.field, d)} />
         )}
         {spec.kind === 'hours' && (
           <span className="ns-hours">
-            <input id={id} className="input" type="time" step="1800" value={v} disabled={busy} onChange={(e) => set(a.field, e.target.value)} />
+            <TimePick id={id} value={v} disabled={busy} label={tx(spec.q)} onChange={(t) => set(a.field, t)} />
             <span>–</span>
-            <input className="input" type="time" step="1800" aria-label={tx('until')} value={values.recording_end ?? ''} disabled={busy}
-              onChange={(e) => set('recording_end', e.target.value)} />
+            <TimePick value={values.recording_end ?? ''} disabled={busy} label={tx('until')} onChange={(t) => set('recording_end', t)} />
           </span>
         )}
         {spec.kind === 'text' && (
@@ -394,10 +397,15 @@ export default function NextStep({ item, to, verb = '', title: given = '', quiet
     // a sheet from the bottom (styles.css). The timetable (who films, the day,
     // the hours) is tall: it opens in the middle of the screen, never pushed
     // down to the bottom edge (the owner, 13 Oct).
+    // Placed low, a long list (twelve people to check it) ran off the bottom of
+    // the screen with its buttons, and could not be scrolled to (the owner, 19
+    // Oct): the panel now ends above the bottom edge, and only its middle
+    // scrolls (styles.css), so the question and the buttons stay in sight.
     const w = wide ? 760 : 400
+    const top = anchor && !wide ? Math.max(12, Math.min(anchor.top + 8, window.innerHeight - 480)) : 0
     const place = anchor && !wide ? {
       left: Math.max(12, Math.min(anchor.left, window.innerWidth - w - 12)),
-      top: Math.max(12, Math.min(anchor.top + 8, window.innerHeight - 420)),
+      top, maxHeight: window.innerHeight - top - 12,
     } : null
     return (
       <div className="co-ask-scrim" onMouseDown={leave}>

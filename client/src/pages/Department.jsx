@@ -36,7 +36,6 @@ import { tr as tx } from '../lib/i18n.jsx'
 import { rememberBoardChannel } from '../lib/boardChannel.js'
 import { useClash } from '../components/ClashDialog.jsx'
 import NextStep from '../components/NextStep.jsx'
-import QuickTask from '../components/QuickTask.jsx'
 import { useSimpleLook, setSimple } from '../lib/look.js'
 import { useNextStep } from '../lib/useNextStep.js'
 import { seatAt, addLater, wayOf } from '../lib/coach.js'
@@ -178,7 +177,6 @@ export default function Department() {
   // The Board opens on the channel looked at last (lib/boardChannel.js).
   useEffect(() => { if (byKey[key] && user?.id) rememberBoardChannel(user.id, key) }, [key, user?.id, byKey])
   const [stepping, setStepping] = useState(null)   // { item, to, title }
-  const [quick, setQuick] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const step = useNextStep(user, statuses, byKey)
   const { stepOf } = step
@@ -701,7 +699,7 @@ export default function Department() {
             {/* Not on a phone: the bottom bar's "+" is the same button, and two
                 "New" buttons on one small screen was one too many (r11). */}
             {manageContent && (
-              <button className="btn btn-primary btn-sm ws-new-idea" onClick={() => setQuick(true)}>
+              <button className="btn btn-primary btn-sm ws-new-idea" onClick={() => { setNewDefaults({ channels: [key] }); setOpenItem('new') }}>
                 <Plus size={15} /> {tx('New idea')}
               </button>
             )}
@@ -866,11 +864,6 @@ export default function Department() {
           }}
           onCancel={() => setStepping(null)} />
       )}
-      {quick && (
-        <QuickTask defaults={{ channel: key }} onClose={() => setQuick(false)}
-          onFull={(typed) => { setQuick(false); setNewDefaults({ channels: [key], ...(typed || {}) }); setOpenItem('new') }}
-          onCreated={(t) => setContent((prev) => (prev.some((x) => x.id === t.id) ? prev : [t, ...prev]))} />
-      )}
 
       {/* Customize modal — toggle sections, reorder with arrows */}
       {dash && (
@@ -927,7 +920,7 @@ export default function Department() {
           <div className="field"><label>{tx("Head of the channel")}</label>
             <select className="select" value={chanEdit.head_id}
               onChange={(e) => setChanEdit({ ...chanEdit, head_id: e.target.value === '' ? '' : Number(e.target.value) })}>
-              <option value="">— nobody —</option>
+              <option value="">{tx('— nobody —')}</option>
               {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>

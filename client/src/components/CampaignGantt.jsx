@@ -46,7 +46,7 @@ export default function CampaignGantt({ camps, onOpen }) {
     return spans
   }, [days])
 
-  if (camps.length === 0) return <div className="card card-pad empty">No campaigns yet.</div>
+  if (camps.length === 0) return <div className="card card-pad empty">{tx('No campaigns yet.')}</div>
 
   return (
     <div className="card gantt-card">
@@ -81,9 +81,9 @@ export default function CampaignGantt({ camps, onOpen }) {
             const progress = c.pace ? Math.min(100, c.pace.fill_pct) : 0
             return (
               <div key={c.id} className="gantt-row">
-                <button className="gantt-label" onClick={() => onOpen(c)} data-tip="Open the campaign">
+                <button className="gantt-label" onClick={() => onOpen(c)} data-tip={tx('Open the campaign')}>
                   <span className="gantt-name">{c.name}</span>
-                  <span className="gantt-sub">{c.owner_name || <span className="pc-red">no owner</span>}{c.project_name ? ` · ${c.project_name}` : ''}</span>
+                  <span className="gantt-sub">{c.owner_name || <span className="pc-red">{tx('no owner')}</span>}{c.project_name ? ` · ${c.project_name}` : ''}</span>
                 </button>
                 <div className="gantt-track">
                   <div className="gantt-today" style={{ left: `${todayPct}%` }} />
@@ -105,9 +105,9 @@ export default function CampaignGantt({ camps, onOpen }) {
 
       {undated.length > 0 && (
         <div className="gantt-undated">
-          <span className="stat-sub" style={{ fontSize: 12.5, fontWeight: 700 }}>Without dates (not on the timeline):</span>
+          <span className="stat-sub" style={{ fontSize: 12.5, fontWeight: 700 }}>{tx('Without dates (not on the timeline):')}</span>
           {undated.map((c) => (
-            <button key={c.id} className="chip chip-muted" onClick={() => onOpen(c)} data-tip="Open and give it dates">{c.name}</button>
+            <button key={c.id} className="chip chip-muted" onClick={() => onOpen(c)} data-tip={tx('Open and give it dates')}>{c.name}</button>
           ))}
         </div>
       )}

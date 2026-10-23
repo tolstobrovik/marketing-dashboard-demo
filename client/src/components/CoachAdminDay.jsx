@@ -41,8 +41,12 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
   const [chan, setChan] = useState('all')
-  const [show, setShow] = useState('all')      // everyone, the crew, the makers, who is free now
+  // Who is on the schedule: the busy — anybody with something today or
+  // something held up — by default (the owner, 23 Oct 2026: "the free ones are
+  // just taking space"); everyone, the crew, the makers, who is free now.
+  const [show, setShow] = useState('busy')
   const [held, setHeld] = useState(null)       // whose "holds up" list is open
+  const [due, setDue] = useState(null)         // whose "due today" list is open, and which kind: { id, k }
   const [asks, setAsks] = useState([])
   const [asksOpen, setAsksOpen] = useState(false)
   const [busyAsk, setBusyAsk] = useState(null)
@@ -113,21 +117,22 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
     return { k: 'free', t: next != null ? tx('Free until {time}', { time: ofMin(next) }) : tx('Free') }
   }
   const crew = (p) => (p.crew_roles || []).length > 0
-  const everyone = data.timeline
-    .map((p) => ({ ...p, items: p.items.filter(on), st: statusOf(p) }))
-    .filter((p) => chan === 'all' || p.items.length)
-  const freeN = everyone.filter((p) => p.st.k === 'free').length
-  const rows = everyone
-    .filter((p) => show === 'all' || (show === 'crew' ? crew(p) : show === 'makers' ? !crew(p) : p.st.k === 'free'))
-    .sort((a, b) => (crew(b) - crew(a)) || String(a.items.find((i) => i.from)?.from || '99').localeCompare(String(b.items.find((i) => i.from)?.from || '99')) || a.name.localeCompare(b.name))
-  // A shoot on the day that nobody films yet: a row of its own, first.
-  const nobody = [...new Map(everyone.flatMap((p) => p.items).filter((i) => i.kind === 'shoot' && !i.operator_id && i.from).map((i) => [i.content_id, i])).values()]
-
   // What a person holds up: their steps past their day, the most late first.
   const holdsOf = (id) => [
     ...overdue.filter((x) => (x.owners || []).includes(id)),
     ...editAsap.filter((x) => x.days_late > 0 && (x.owners || []).includes(id)).map((x) => ({ ...x, phase: 'edit' })),
   ].sort((a, b) => b.days_late - a.days_late)
+  const everyone = data.timeline
+    .map((p) => ({ ...p, items: p.items.filter(on), st: statusOf(p) }))
+    .filter((p) => chan === 'all' || p.items.length)
+  const freeN = everyone.filter((p) => p.st.k === 'free').length
+  const busy = (p) => p.items.some((i) => !i.done) || holdsOf(p.id).length > 0
+  const busyN = everyone.filter(busy).length
+  const rows = everyone
+    .filter((p) => show === 'all' || (show === 'busy' ? busy(p) : show === 'crew' ? crew(p) : show === 'makers' ? !crew(p) : p.st.k === 'free'))
+    .sort((a, b) => (crew(b) - crew(a)) || String(a.items.find((i) => i.from)?.from || '99').localeCompare(String(b.items.find((i) => i.from)?.from || '99')) || a.name.localeCompare(b.name))
+  // A shoot on the day that nobody films yet: a row of its own, first.
+  const nobody = [...new Map(everyone.flatMap((p) => p.items).filter((i) => i.kind === 'shoot' && !i.operator_id && i.from).map((i) => [i.content_id, i])).values()]
 
   // ---- the hours: the working day, stretched to whatever is on it ----
   const shown = [...rows, ...(nobody.length ? [{ items: nobody, busy: [] }] : [])]
@@ -170,14 +175,19 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
       </div>
     )
   }
-  // Due that day, said in words: "1 edit", "2 covers"; a shoot or a post with no hour is named here too.
+  // Due that day, said in words: "1 edit", "2 covers" — pressed, the list of
+  // them opens under the row, the way "holds up" opens (the owner, 23 Oct
+  // 2026); a shoot or a post with no hour is named here too.
+  const dueOf = (p, k) => p.items.filter((i) => i.kind === k && !i.done)
+  const dueToggle = (p, k) => setDue(due && due.id === p.id && due.k === k ? null : { id: p.id, k })
   const dueCell = (p) => {
-    const cuts = p.items.filter((i) => i.kind === 'cut' && !i.done), arts = p.items.filter((i) => i.kind === 'art' && !i.done)
+    const cuts = dueOf(p, 'cut'), arts = dueOf(p, 'art')
     const loose = p.items.filter((i) => (i.kind === 'shoot' || i.kind === 'post') && !i.from && !i.done)
+    const isOpen = (k) => !!due && due.id === p.id && due.k === k
     return (
       <>
-        {cuts.length > 0 && <button type="button" className="co-ad-du co-k-cut" onClick={() => onOpen(cuts[0].content_id)} title={cuts.map((i) => i.title).join(', ')}><Scissors size={13} aria-hidden="true" />{cuts.length > 1 ? tx('{n} edits', { n: cuts.length }) : tx('1 edit')}</button>}
-        {arts.length > 0 && <button type="button" className="co-ad-du co-k-art" onClick={() => onOpen(arts[0].content_id)} title={arts.map((i) => i.title).join(', ')}><Palette size={13} aria-hidden="true" />{arts.length > 1 ? tx('{n} covers', { n: arts.length }) : tx('1 cover')}</button>}
+        {cuts.length > 0 && <button type="button" className="co-ad-du co-k-cut" aria-expanded={isOpen('cut')} onClick={() => dueToggle(p, 'cut')} title={cuts.map((i) => i.title).join(', ')}><Scissors size={13} aria-hidden="true" />{cuts.length > 1 ? tx('{n} edits', { n: cuts.length }) : tx('1 edit')}</button>}
+        {arts.length > 0 && <button type="button" className="co-ad-du co-k-art" aria-expanded={isOpen('art')} onClick={() => dueToggle(p, 'art')} title={arts.map((i) => i.title).join(', ')}><Palette size={13} aria-hidden="true" />{arts.length > 1 ? tx('{n} covers', { n: arts.length }) : tx('1 cover')}</button>}
         {loose.map((i) => <button key={`l${i.kind}${i.content_id}`} type="button" className="co-ad-du" onClick={() => onOpen(i.content_id)} title={i.title}>{i.kind === 'post' ? <Send size={13} aria-hidden="true" /> : <Clapperboard size={13} aria-hidden="true" />}{i.kind === 'post' ? tx('Goes out') : tx('Shoot, no hour')}</button>)}
       </>
     )
@@ -227,7 +237,7 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
           : <Badge tone="wait">{x.days_late === 0 ? tx('due today') : tx('due tomorrow')}</Badge>),
     },
   ]
-  const SHOW = [['all', tx('Everyone')], ['crew', tx('Crew')], ['makers', tx('Makers')], ...(now != null ? [['free', `${tx('Free')} (${freeN})`]] : [])]
+  const SHOW = [['busy', `${tx('Busy')} (${busyN})`], ['all', tx('Everyone')], ['crew', tx('Crew')], ['makers', tx('Makers')], ...(now != null ? [['free', `${tx('Free')} (${freeN})`]] : [])]
 
   return (
     <div className="co co-admin">
@@ -288,18 +298,18 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
       </p>
 
       <div className="co-ad-wrap">
-        <div className="co-ad" role="table" aria-label={tx('Who does what today')}>
-          <div className="co-ad-r co-ad-hd" role="row">
-            <span className="co-ad-who" role="columnheader" />
-            <div className="co-ad-trk" role="columnheader" aria-label={tx('Hours')}>
+        <div className="co-ad" role="group" aria-label={tx('Who does what today')}>
+          <div className="co-ad-r co-ad-hd">
+            <span className="co-ad-who" />
+            <div className="co-ad-trk" aria-label={tx('Hours')}>
               {hours.map((m) => m < end && (now == null || Math.abs(now - m) > 25) && <span key={m} style={{ left: pct(m) }}>{ofMin(m)}</span>)}
               {now != null && <b className="co-ad-nowl" style={{ left: pct(now) }}>{ofMin(now)}</b>}
             </div>
-            <span className="co-ad-dk" role="columnheader">{tx('Due today')}</span>
-            <span className="co-ad-dk" role="columnheader">{tx('Holds up')}</span>
+            <span className="co-ad-dk">{tx('Due today')}</span>
+            <span className="co-ad-dk">{tx('Overdue')}</span>
           </div>
           {nobody.length > 0 && show !== 'makers' && (
-            <div className="co-ad-r nobody" role="row">
+            <div className="co-ad-r nobody">
               <span className="co-ad-who"><span className="co-ad-q" aria-hidden="true">?</span><span><b>{tx('Nobody yet')}</b><small>{tx('Press it to choose who films it')}</small></span></span>
               {track({ working: true, busy: [] }, nobody)}
               <span className="co-ad-dk" />
@@ -307,11 +317,26 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
             </div>
           )}
           {rows.map((p) => (
-            <div key={p.id} className="co-ad-r" role="row">
+            <div key={p.id} className="co-ad-r">
               <span className="co-ad-who"><Face person={person(p.id) || { name: p.name }} /><span><b>{firstName(person(p.id) || p)}</b><small className={p.st.k}>{p.st.t}</small></span></span>
               {track(p, p.items)}
               <span className="co-ad-dk">{dueCell(p)}</span>
               <span className="co-ad-dk">{holdBtn(p)}</span>
+              {due && due.id === p.id && (() => {
+                const list = dueOf(p, due.k)
+                const k = `d${p.id}${due.k}`
+                const kind = due.k === 'cut' ? 'edit' : 'design'
+                return (
+                  <div className="co-ad-drw" aria-label={due.k === 'cut' ? tx('Edits due today') : tx('Covers due today')}>
+                    {(all[k] ? list : list.slice(0, 5)).map((x) => row({ ...x, phase: kind }, kind, (x.channels || []).map((c) => byKey[c]?.label || c).join(' · '), <Badge tone="wait">{tx('due today')}</Badge>))}
+                    {list.length > 5 && (
+                      <button type="button" className="co-link co-more-rows" onClick={() => setAll((a) => ({ ...a, [k]: !a[k] }))}>
+                        {all[k] ? tx('Show fewer') : tx('Show all {n}', { n: list.length })}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
               {held === p.id && (
                 <div className="co-ad-drw">
                   {(all[`h${p.id}`] ? holdsOf(p.id) : holdsOf(p.id).slice(0, 5)).map((x) => row(x, KIND_OF[x.phase], WHAT[x.phase](), <Badge tone="late">{lateWords(x.days_late)}</Badge>))}
@@ -325,6 +350,7 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
             </div>
           ))}
           {rows.length === 0 && <p className="co-quiet">{show === 'free' ? tx('Nobody is free right now.') : tx('Nobody has a shoot, an edit or a post on {day}.', { day: dayInLine(day, today) })}</p>}
+          {rows.length === 0 && show === 'busy' && everyone.length > 0 && <p className="co-quiet">{tx('The whole team is free: press “Everyone”.')}</p>}
         </div>
       </div>
 

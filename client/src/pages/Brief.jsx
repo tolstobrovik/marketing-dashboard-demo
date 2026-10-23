@@ -24,7 +24,6 @@ import { NETWORKS } from '../components/CoachBits.jsx'
 import { byNetwork, tailOf } from '../components/Sidebar.jsx'
 import { crewEntries, crewDay, makerDay, makeDone } from '../lib/coach.js'
 import { useNextStep } from '../lib/useNextStep.js'
-import QuickTask from '../components/QuickTask.jsx'
 import { useSimpleLook, setSimple } from '../lib/look.js'
 import MyPay from '../components/MyPay.jsx'
 import DayAgenda from '../components/DayAgenda.jsx'
@@ -408,7 +407,6 @@ export default function Brief({ calendar = false }) {
   // How the task window was asked to open: on which of a person's two jobs
   // (`prefer`), and with what already under the cursor (`focus`).
   const [openWith, setOpenWith] = useState({})
-  const [quick, setQuick] = useState(false)   // the four-answer new task (QuickTask)
   // On a phone the answer tray shows the next two and folds the rest: twelve
   // bookings waiting on an answer were two full screens to scroll before the
   // day itself appeared. The desk has the room and keeps the whole list.
@@ -772,7 +770,7 @@ export default function Brief({ calendar = false }) {
 
   if (loading) return <div className="app-loading"><span className="spinner" /></div>
 
-  const niceDate = new Date(`${today}T12:00:00Z`).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })
+  const niceDate = longDayLabel(today)
   const firstName = user.name.split(' ')[0]
 
 
@@ -989,7 +987,7 @@ export default function Brief({ calendar = false }) {
             <CoachMakerDay model={makerModel} pieces={makerPieces} user={user} today={today} byKey={byKey} pipe={step.pipe} team={team}
               roundsOf={roundsOf} reviewsOn={step.reviewsOn} making={step.makingFor}
               onOpen={openTask} onChanged={changed}
-              onNew={can(user, 'manage_content') ? () => setQuick(true) : null}
+              onNew={can(user, 'manage_content') ? () => setOpenItem('new') : null}
               more={(
                 <>
                   <Streak />
@@ -1016,10 +1014,6 @@ export default function Brief({ calendar = false }) {
                   </details>
                 </>
               )} />
-          )}
-          {quick && (
-            <QuickTask onClose={() => setQuick(false)}
-              onCreated={(t) => setContent((prev) => (prev.some((x) => x.id === t.id) ? prev : [t, ...prev]))} />
           )}
           {taskWindow}
         </>
@@ -1070,7 +1064,8 @@ export default function Brief({ calendar = false }) {
         <button type="button" className="sd-classic" onClick={() => setSimple(user, true)}>{tx('Try the new, simpler look')}</button>
 
         {openItem && (
-          <ContentModal key={openItem?.id || 'new'} item={openItem} statuses={statuses} onClose={(next) => setOpenItem(next?.id ? next : null)}
+          <ContentModal key={openItem?.id || 'new'} item={openItem === 'new' ? null : openItem} statuses={statuses} onClose={(next) => setOpenItem(next?.id ? next : null)}
+            onCreate={async (payload) => { const c = await api.post('/content', payload); setContent((prev) => (prev.some((x) => x.id === c.id) ? prev : [c, ...prev])); return c }}
             onUpdate={updateContent} onDelete={deleteContent} />
         )}
       </>

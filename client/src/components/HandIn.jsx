@@ -337,9 +337,14 @@ export default function HandIn({ item, kind, onDone, onClose, onOpenFull, inline
             <li>{tx('Press “{button}”.', { button: label || tx(job.button) })} {steps}</li>
           </ol>
         )}
-        <button type="button" className="btn btn-primary hi-go" disabled={!ready || busy || sending} onClick={submit}>
-          {sendIcon ? <Send size={16} /> : <Check size={16} />} {busy ? tx('Handing in…') : sending ? tx('Uploading…') : label || tx(job.button)}
-        </button>
+        {/* T-04: in the window the button appears when it can be pressed; the
+            window's own line above it says what is still missing. The sheet
+            (not inline) keeps a sleeping button, since it has no such line. */}
+        {(!inline || ready || busy || sending) && (
+          <button type="button" className="btn btn-primary hi-go" disabled={!ready || busy || sending} onClick={submit}>
+            {sendIcon ? <Send size={16} /> : <Check size={16} />} {busy ? tx('Handing in…') : sending ? tx('Uploading…') : label || tx(job.button)}
+          </button>
+        )}
 
         {onOpenFull && !inline && (
           <button type="button" className="hi-full" onClick={() => { onClose?.(); onOpenFull(item) }}>

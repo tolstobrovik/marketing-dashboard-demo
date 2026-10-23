@@ -84,7 +84,7 @@ function CandidateModal({ candidate, positions, onClose, onSaved, onDeleted }) {
             onChange={(e) => set({ name: e.target.value })} />
         </div>
         <div className="field"><label>{tx("Contacts")}</label>
-          <input className="input" value={form.contacts} placeholder="+998 …, @telegram, email"
+          <input className="input" value={form.contacts} placeholder={tx('+998 …, @telegram, email')}
             onChange={(e) => set({ contacts: e.target.value })} />
         </div>
       </div>
@@ -97,11 +97,11 @@ function CandidateModal({ candidate, positions, onClose, onSaved, onDeleted }) {
           </datalist>
         </div>
         <div className="field"><label>{tx("Expected salary")}</label>
-          <input className="input" value={form.salary} placeholder="e.g. $600 / 7 mln UZS"
+          <input className="input" value={form.salary} placeholder={tx('e.g. $600 / 7 mln UZS')}
             onChange={(e) => set({ salary: e.target.value })} />
         </div>
       </div>
-      <div className="field"><label>Portfolio <span className="stat-sub">(link or where to look)</span></label>
+      <div className="field"><label>{tx('Portfolio')} <span className="stat-sub">({tx('link or where to look')})</span></label>
         <input className="input" value={form.portfolio} placeholder="https://…"
           onChange={(e) => set({ portfolio: e.target.value })} />
       </div>
@@ -193,7 +193,7 @@ function MemberModal({ member, channels, onClose, onSaved }) {
         </div>
       </div>
       <div className="grid grid-2" style={{ gap: 12 }}>
-        <div className="field"><label>Email <span className="stat-sub">(optional)</span></label>
+        <div className="field"><label>{tx('Email')} <span className="stat-sub">({tx('optional')})</span></label>
           <input className="input" type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} />
         </div>
         <div className="field"><label>{tx("Role")}</label>

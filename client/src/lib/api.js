@@ -56,7 +56,16 @@ export const cache = {
 // `retryable` BEFORE the request touches anything — nothing was read, written
 // or half-done, so sending it again is always safe. The wait is short and
 // silent: a storage hiccup should cost a heartbeat, not somebody's typed task.
-const RETRY_WAITS = [400, 1200, 2500]
+//
+// A 502 is the same promise made by the server in FRONT of the app: nginx
+// could not connect, so the app never saw the request. That is what a restart
+// looks like from a browser — the process is down for a few seconds while pm2
+// starts it again — and it used to surface as "Request failed (502)" on
+// whatever somebody had just pressed. The waits add up to eight seconds,
+// which covers a restart; a 504 is NOT retried, because a timeout means the
+// app may have done the work and only the answer was lost.
+const RETRY_WAITS = [400, 1200, 2500, 4000]
+const restarting = (res, readable) => res.status === 502 || (res.status === 503 && !readable)
 async function request(path, { method = 'GET', body } = {}) {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`/api${path}`, {
@@ -88,7 +97,7 @@ async function request(path, { method = 'GET', body } = {}) {
       }
       throw Object.assign(new Error('The answer arrived incomplete — try again'), { status: res.status })
     }
-    if (res.status === 503 && data.retryable && attempt < RETRY_WAITS.length) {
+    if (((res.status === 503 && data.retryable) || restarting(res, readable)) && attempt < RETRY_WAITS.length) {
       await new Promise((r) => setTimeout(r, RETRY_WAITS[attempt]))
       continue
     }
@@ -127,10 +136,27 @@ async function blob(path) {
 // (post/patch/del) drop the memo so nothing stale survives an edit.
 const memo = new Map() // path -> { at, promise }
 const MEMO_TTL = 30000
+//
+// A reference list that fails to load is asked for again on a widening wait
+// (S-08: one failed GET /users after a server restart left every picker empty
+// until a reload). Only what looks like a blip is retried — no answer at all,
+// or the server's own 5xx; a refusal (401, 403, 404) is final at once. The
+// one promise is shared, so a dozen pickers opened in the meantime wait on
+// the same three tries rather than start their own.
+const LIST_BACKOFF = [1000, 3000, 10000]
+const transient = (e) => !e?.status || e.status >= 500
+async function patiently(path) {
+  for (let i = 0; ; i++) {
+    try { return await request(path) } catch (e) {
+      if (!transient(e) || i >= LIST_BACKOFF.length) throw e
+      await new Promise((r) => setTimeout(r, LIST_BACKOFF[i]))
+    }
+  }
+}
 function cachedGet(path) {
   const hit = memo.get(path)
   if (hit && Date.now() - hit.at < MEMO_TTL) return hit.promise
-  const promise = request(path).catch((e) => { memo.delete(path); throw e })
+  const promise = patiently(path).catch((e) => { memo.delete(path); throw e })
   memo.set(path, { at: Date.now(), promise })
   return promise
 }

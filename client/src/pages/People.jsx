@@ -235,7 +235,7 @@ export default function People() {
     <div className="people-board">
       <header className="pb-top">
         <div className="pb-title">
-          <h2>{tx('Monthly notes')}</h2>
+          <h2>{tx('Notes')}</h2>
           <p className="pb-sub">{tx('What each month was like. Only superadmins read this.')}</p>
         </div>
         <div className="pb-top-right">

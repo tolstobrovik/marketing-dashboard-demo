@@ -10,6 +10,7 @@ import { editDue, reviewDue } from '../lib/due.js'
 import { makeDone, daysBetween } from '../lib/coach.js'
 import { toast } from '../lib/toast.js'
 import { tr as tx } from '../lib/i18n.jsx'
+import DayPick from './DayPick.jsx'
 
 // ---- the plan of a task: one row per stop, pressed to change it (round 14) ----------------
 //
@@ -90,9 +91,7 @@ function DayGrid({ today, value, out, onPick }) {
         })}
       </div>
       {days.includes(out) && <p className="r14-dg-key"><i aria-hidden="true" />{tx('the day it goes out')}</p>}
-      <label className="r14-dg-other">{tx('Another day…')}
-        <input className="input" type="date" min={today} onChange={(e) => { if (e.target.value) onPick(e.target.value) }} />
-      </label>
+      <DayPick className="r14-dg-other" value="" min={today} label={tx('Another day…')} placeholder={tx('Another day…')} onChange={(d) => { if (d) onPick(d) }} />
     </div>
   )
 }

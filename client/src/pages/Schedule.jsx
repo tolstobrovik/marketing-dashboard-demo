@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageGuide from '../components/PageGuide.jsx'
-import { useSearchParams } from 'react-router-dom'
-import { Send, Clapperboard, AlertCircle, CalendarDays, Download, CalendarRange, X, Layers, ListFilter } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Send, Clapperboard, AlertCircle, CalendarDays, Download, CalendarRange, X, Layers } from 'lucide-react'
 import { api, cache } from '../lib/api.js'
 import { rewardIfFinished } from '../lib/reward.js'
 import { toast, loadFailed } from '../lib/toast.js'
 import { useAuth } from '../lib/auth.jsx'
 import { useChannels } from '../lib/channels.jsx'
-import { can, todayISO, dateLabel, typeInfo, isDeletedLabel, fixMonth, addDaysISO, mondayOfISO } from '../lib/constants.js'
+import { can, todayISO, dateLabel, typeInfo, isDeletedLabel, fixMonth, addDaysISO, mondayOfISO, fmtDay } from '../lib/constants.js'
 import ContentModal from '../components/ContentModal.jsx'
 import ContentCalendar from '../components/ContentCalendar.jsx'
 import DayAgenda from '../components/DayAgenda.jsx'
-import ContentFilters, { BLANK_FILTER, matchesFilter, filterIsOn, assigneesOf } from '../components/ContentFilters.jsx'
+import { assigneesOf } from '../components/ContentFilters.jsx'
+import { BLANK, HATS, cleanFilter, isOn, matches, matchesPerson, matchesStages, seatedOf } from '../lib/schedFilter.js'
+import Avatar from '../components/Avatar.jsx'
+import { StageMark } from '../components/CoachParts.jsx'
 import { stageRankOf } from '../lib/gaps.js'
 import { cascadeDates, pullBackDates, LABELS } from '../lib/formState.js'
 import BulkMove from '../components/BulkMove.jsx'
@@ -28,7 +31,7 @@ const LATE_SHOWN = 3   // one line (round 10); the rest behind "Show all"
 // dateLabel() days on the same page still wait for the date sweep that
 // constants.js describes.)
 const plainDay = (iso) => fixMonth(
-  new Date(`${iso}T00:00:00`).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
+  fmtDay(iso),
   Number(iso.slice(5, 7)) - 1)
 // A phone turned on its side is still a phone: 852px wide and 393 tall, and
 // still a finger. So a short touch screen counts as well as a narrow one — a
@@ -149,17 +152,31 @@ export default function Schedule({ mode }) {
   const teamById = useMemo(() => Object.fromEntries(team.map((u) => [u.id, { id: u.id, name: u.name }])), [team])
 
   // ---- what this page is looking at ----
-  const [filter, setFilterState] = useState(BLANK_FILTER)
+  // A person and the stages, pressed on the rails beside the grid (the owner,
+  // 22 Oct 2026: "I don't have to click on the filter button and then
+  // dropdowns"). What a name means here is the view's seat — lib/schedFilter.js.
+  const [filter, setFilterState] = useState(BLANK)
   useEffect(() => {
     // First visit: your own work (r11). Everybody's pieces at once is the page
     // that froze; an admin, who runs everybody's, still starts on everyone.
-    const first = user.role === 'admin' ? BLANK_FILTER : { ...BLANK_FILTER, person: String(user.id) }
+    const first = user.role === 'admin' ? BLANK : { ...BLANK, person: String(user.id) }
     try {
-      const saved = localStorage.getItem(`satashkent_sched_${mode}`)
-      setFilterState(saved ? { ...BLANK_FILTER, ...JSON.parse(saved) } : first)
+      const saved = localStorage.getItem(`satashkent_sched2_${mode}`)
+      setFilterState(saved ? cleanFilter(JSON.parse(saved)) : first)
     } catch { setFilterState(first) }
   }, [mode, user.id, user.role])
-  const setFilter = (f) => { setFilterState(f); localStorage.setItem(`satashkent_sched_${mode}`, JSON.stringify(f)) }
+  const setFilter = (f) => { setFilterState(f); localStorage.setItem(`satashkent_sched2_${mode}`, JSON.stringify(f)) }
+  const toggleStage = (id) => {
+    const s = String(id)
+    setFilter({ ...filter, stages: filter.stages.includes(s) ? filter.stages.filter((x) => x !== s) : [...filter.stages, s] })
+  }
+  // The other calendar is one press away, with the channels and the lens kept.
+  const navigate = useNavigate()
+  const go = (which) => {
+    if (which === mode) return
+    const qs = params.toString()
+    navigate(`${which === 'release' ? '/calendar' : '/recordings'}${qs ? `?${qs}` : ''}`)
+  }
   // Several channels at once: planning a campaign across Instagram Main and
   // Telegram is the point of one calendar. Kept in the address as
   // ?channels=a,b (the old single ?channel= still opens), so a link says
@@ -249,13 +266,52 @@ export default function Schedule({ mode }) {
   const alive = useMemo(
     () => items.filter((t) => M.applies(t) && !isDeletedLabel(statusesById[t.status_id]?.label)),
     [items, statusesById, M])
-  const onChannel = useMemo(() => {
-    const inLens = lens ? alive.filter((t) => lens.ids.has(t.campaign_id)) : alive
-    return chosen.length ? inLens.filter((t) => (t.channels || []).some((c) => chosen.includes(c))) : inLens
-  }, [alive, chosen, lens])
+  const inLens = useMemo(() => (lens ? alive.filter((t) => lens.ids.has(t.campaign_id)) : alive), [alive, lens])
+  const onChannel = useMemo(
+    () => (chosen.length ? inLens.filter((t) => (t.channels || []).some((c) => chosen.includes(c))) : inLens),
+    [inLens, chosen])
   const shown = useMemo(
-    () => (filterIsOn(filter) ? onChannel.filter((t) => matchesFilter(t, filter)) : onChannel),
-    [onChannel, filter])
+    () => (isOn(filter) ? onChannel.filter((t) => matches(t, filter, mode)) : onChannel),
+    [onChannel, filter, mode])
+
+  // The rails' numbers: what each press would leave on the grid, so a channel
+  // with nothing in it says 0 before it is pressed. Each facet is counted with
+  // the other two applied and itself left open — the usual way, and the only
+  // one where the numbers add up to what is drawn.
+  const plotted = useCallback((t) => !!t[M.dateField], [M])
+  const chanCount = useMemo(() => {
+    const n = {}
+    for (const t of inLens) {
+      if (!plotted(t) || !matches(t, filter, mode)) continue
+      for (const c of t.channels || []) n[c] = (n[c] || 0) + 1
+    }
+    n[''] = inLens.filter((t) => plotted(t) && matches(t, filter, mode)).length
+    return n
+  }, [inLens, filter, mode, plotted])
+  const stageCount = useMemo(() => {
+    const n = {}
+    for (const t of onChannel) if (plotted(t) && matchesPerson(t, filter.person, mode)) n[t.status_id] = (n[t.status_id] || 0) + 1
+    return n
+  }, [onChannel, filter.person, mode, plotted])
+  // Whose work the view can be narrowed to: the crew with this view's hat
+  // (who films on Recordings; who edits or designs on the Master Calendar),
+  // plus anybody sitting in that seat on the work on screen, plus yourself.
+  const people = useMemo(() => {
+    const seen = new Map()
+    const add = (id, n) => { if (!seen.has(id)) seen.set(id, 0); if (n) seen.set(id, seen.get(id) + 1) }
+    for (const u of team) if ((u.crew_roles || []).some((h) => HATS[mode].includes(h))) add(u.id, 0)
+    for (const t of onChannel) {
+      const counts = plotted(t) && matchesStages(t, filter.stages)
+      for (const id of seatedOf(t, mode)) add(id, counts ? 1 : 0)
+    }
+    if (filter.person && filter.person !== String(user.id)) add(Number(filter.person), 0)
+    const rows = [...seen.entries()].filter(([id]) => id !== user.id)
+      .map(([id, n]) => ({ id, n, name: teamById[id]?.name || `#${id}` }))
+      .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))
+    const me = seen.has(user.id) || M.master ? [{ id: user.id, n: seen.get(user.id) || 0, name: user.name, mine: true }] : []
+    return [...me, ...rows]
+  }, [team, onChannel, filter.stages, filter.person, mode, plotted, teamById, user, M])
+  const fullTeam = useMemo(() => Object.fromEntries(team.map((u) => [u.id, u])), [team])
 
   const byWhen = useCallback(
     (a, b) => (a[M.dateField] + (a[M.timeField] || '')).localeCompare(b[M.dateField] + (b[M.timeField] || '')),
@@ -272,8 +328,6 @@ export default function Schedule({ mode }) {
   // not a strip, it is a backlog, and dragging them back one at a time was the
   // wrong person doing the wrong job. The rest are on their owners' My Day.
   const [allLate, setAllLate] = useState(false)
-  // Round 10: the four filters wait behind one button, and stay out while one is on.
-  const [showFilter, setShowFilter] = useState(false)
   const phone = useIsPhone()
   const [lateOpen, setLateOpen] = useState(false)
   // Only Releases carries the strip. A shoot day that has passed is not a
@@ -555,9 +609,11 @@ export default function Schedule({ mode }) {
   // finger there and still a 40px target beside every day.
   // …and only on a channel that is this person's to file under: POST refuses
   // "Not your channel" after the whole form has been filled in.
-  const addAt = manageContent && channel && !viewOnly && mine({ channels: [channel] })
+  // …or, with every channel on screen, the builder asks where first (23 Oct
+  // 2026): the day pressed is the day the piece is born on.
+  const addAt = manageContent && !viewOnly && (!channel || mine({ channels: [channel] }))
     ? (iso) => {
-      setNewDefaults({ channels: [channel], [M.dateField]: iso, ...(campaignId ? { campaign_id: campaignId } : {}) })
+      setNewDefaults({ ...(channel ? { channels: [channel] } : {}), [M.dateField]: iso, ...(campaignId ? { campaign_id: campaignId } : {}) })
       setOpenItem('new')
     }
     : undefined
@@ -575,100 +631,125 @@ export default function Schedule({ mode }) {
       {clashUi}
       {/* On a phone the top bar already names the page, so the heading, its
           line and the CSV give their room to the week (r11). */}
-      <div className="section-head sch-head">
-        {!phone && <>
-          <Icon size={17} style={{ color: 'var(--brand-500)' }} />
-          <h2>{M.label}</h2>
-          <span className="stat-sub" style={{ fontWeight: 500 }}>{M.lead}</span>
-          <PageGuide page={M.master ? 'calendar' : 'schedule'} statusesById={statusesById} />
-        </>}
-        <span className="spacer" />
-        {/* One menu on both calendars: a row of twelve channel buttons was a
-            wall (round 10). Several channels at once still work from the
-            address, which is how a campaign's lens sets them. */}
-        <select className="select cf-sel" value={channel} aria-label={tx('Channels')} onChange={(e) => setChosen(e.target.value ? [e.target.value] : [])}>
-          <option value="">{tx("All channels")}</option>
-          {channelList.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-        </select>
-        <button type="button" className="btn btn-sm" aria-expanded={showFilter || filterIsOn(filter)} onClick={() => setShowFilter((v) => !v)}>
-          <ListFilter size={13} /> {tx('Filter')}
-        </button>
-        {!phone && (
-          <button className="btn btn-sm sch-export" onClick={exportCsv} data-tip={tx("Download exactly what is shown")}>
-            <Download size={13} /> CSV
+      {/* One frame (the owner, 22 Oct 2026): the two calendars are two buttons
+          at the top, the channels are a rail on the left, the stages a rail on
+          the right, and a name is pressed where it is seen. No filter button,
+          no menus, nothing stacked above the grid but the late line. */}
+      <div className={'card sch-frame' + (phone ? ' sch-phone' : '')}>
+        <div className="sch-top">
+          <div className="sch-view" role="tablist" aria-label={tx('Calendar')}>
+            <button type="button" role="tab" aria-selected={!M.master} className={'sch-view-btn' + (!M.master ? ' active' : '')} onClick={() => go('recording')}>
+              <Clapperboard size={14} aria-hidden="true" /> {tx('Shooting')}
+            </button>
+            <button type="button" role="tab" aria-selected={!!M.master} className={'sch-view-btn' + (M.master ? ' active' : '')} onClick={() => go('release')}>
+              <Send size={14} aria-hidden="true" /> {tx('Releasing')}
+            </button>
+          </div>
+          {!phone && <span className="sch-lead">{M.lead}</span>}
+          {!phone && <PageGuide page={M.master ? 'calendar' : 'schedule'} statusesById={statusesById} />}
+          {/* The lens is the reason most of the month is empty, so it is said. */}
+          {M.master && lens && (
+            <span className="mcal-lens">
+              <span className="mcal-lens-label" title={lens.label}>{lens.label}</span>
+              <button type="button" className="icon-btn" onClick={dropLens} aria-label={tx('Show everything')} data-tip={tx('Show everything')}><X size={13} /></button>
+            </span>
+          )}
+          <span className="spacer" />
+          {!phone && (
+            <button className="btn btn-sm sch-export" onClick={exportCsv} data-tip={tx("Download exactly what is shown")}>
+              <Download size={13} /> CSV
+            </button>
+          )}
+        </div>
+
+        {/* Late work is the only part of a schedule that needs deciding about
+            today, and a calendar parked on this month would leave it behind in
+            the last one. So it is one line under the top, wherever you have
+            navigated to — press to open it, or put it on today in one press. */}
+        {/* On a phone the late work is one chip until it is pressed: nine late
+            rows above the week pushed the week off the screen (r11). */}
+        {late.length > 0 && !selectedDate && phone && !lateOpen && (
+          <button type="button" className="sch-late-chip" onClick={() => setLateOpen(true)} aria-expanded="false">
+            <AlertCircle size={13} aria-hidden="true" /> {tx('{n} late', { n: late.length })}
           </button>
         )}
-      </div>
+        {late.length > 0 && !selectedDate && (!phone || lateOpen) && (
+          <div className={'sch-late' + (late.length > LATE_SHOWN && !allLate ? ' shut' : '')}>
+            <span className="sch-late-label">
+              {phone && <button type="button" className="qbtn" onClick={() => setLateOpen(false)}>{tx('Hide')}</button>}
+              <AlertCircle size={13} aria-hidden="true" /> {tx('Overdue')}<b> · {late.length}</b>
+              {carriedLate > 0 && <span className="sch-carried">{tx('{n} carried over from {month}', { n: carriedLate, month: monthLongOf(carriedFrom(late, todayISO())) })}</span>}
+              {late.length > LATE_SHOWN && (
+                <button type="button" className="qbtn" onClick={() => setAllLate((v) => !v)}>
+                  {allLate ? tx('Show fewer') : `${tx('Show all')} · ${late.length}`}
+                </button>
+              )}
+            </span>
+            <div className="cal-tray-items">
+              {(allLate ? late : late.slice(0, LATE_SHOWN)).map((t) => {
+                const st = statusesById[t.status_id]
+                return (
+                  <div
+                    key={t.id}
+                    className={'cal-tray-chip late-chip' + (isCarried(t, today) ? ' late-chip-carried' : '')}
+                    style={st ? { borderLeftColor: st.color } : undefined}
+                    onClick={() => setOpenItem(t)}
+                    title={`${t.title} — ${tx('due {day}', { day: dateLabel(t[M.dateField]) })}`}
+                  >
+                    <span className="late-when">{dateLabel(t[M.dateField])}</span>
+                    <span className="ev-txt">{t.title}</span>
+                    {/* "Today" is a reschedule, so it asks what a drag asks —
+                        and a phone on the Master Calendar only looks. */}
+                    {(M.master ? mayMoveDay(t) : canMove) && !viewOnly && (
+                      <span className="tray-quick">
+                        <button type="button" className="qbtn" data-tip={tx("Move to today")}
+                          onClick={(e) => { e.stopPropagation(); setDay(t, M.dateField, today, false) }}>{tx("Today")}</button>
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
-      {/* The lens is the reason most of the month is empty, so it is said. */}
-      {M.master && lens && (
-        <div className="mcal-chans">
-          <span className="mcal-lens">
-            <span className="mcal-lens-label" title={lens.label}>{lens.label}</span>
-            <button type="button" className="icon-btn" onClick={dropLens} aria-label={tx('Show everything')} data-tip={tx('Show everything')}><X size={13} /></button>
-          </span>
-        </div>
-      )}
-
-      {(showFilter || filterIsOn(filter)) && (
-        <ContentFilters
-          filter={filter} onChange={setFilter}
-          items={onChannel} shown={shown.length}
-          statuses={statuses} teamById={teamById}
-        />
-      )}
-
-      {/* Late work is the only part of a schedule that needs deciding about
-          today, and a calendar parked on this month would leave it behind in
-          the last one. So it rides above the grid wherever you have navigated
-          to — click to open it, or put it on today in one press. */}
-      {/* On a phone the late work is one chip until it is pressed: nine late
-          rows above the week pushed the week off the screen (r11). */}
-      {late.length > 0 && !selectedDate && phone && !lateOpen && (
-        <button type="button" className="sch-late-chip" onClick={() => setLateOpen(true)} aria-expanded="false">
-          <AlertCircle size={13} aria-hidden="true" /> {tx('{n} late', { n: late.length })}
-        </button>
-      )}
-      {late.length > 0 && !selectedDate && (!phone || lateOpen) && (
-        <div className={'cal-tray sch-late' + (late.length > LATE_SHOWN && !allLate ? ' shut' : '')}>
-          <span className="cal-tray-label">
-            {phone && <button type="button" className="qbtn" onClick={() => setLateOpen(false)}>{tx('Hide')}</button>}
-            <AlertCircle size={12} /> {tx('Overdue')}<b> · {late.length}</b>
-            {carriedLate > 0 && <span className="sch-carried">{tx('{n} carried over from {month}', { n: carriedLate, month: monthLongOf(carriedFrom(late, todayISO())) })}</span>}
-            {late.length > LATE_SHOWN && (
-              <button type="button" className="qbtn" onClick={() => setAllLate((v) => !v)}>
-                {allLate ? tx('Show fewer') : `${tx('Show all')} · ${late.length}`}
+        <div className="sch-body">
+          {/* Left: the channels, then whose work. One press each; the press
+              again lets go. Several channels at once still come from the
+              address (a campaign's lens). */}
+          <aside className="sch-rail sch-rail-l" aria-label={tx('Channels')}>
+            <div className="sch-group">
+            <div className="sch-rail-h">{tx('Channels')}</div>
+            <button type="button" className={'sch-opt' + (!chosen.length ? ' active' : '')} aria-pressed={!chosen.length} onClick={() => setChosen([])}>
+              <span className="sch-txt">{tx('All channels')}</span><span className="sch-n">{chanCount[''] || 0}</span>
+            </button>
+            {channelList.map((c) => (
+              <button key={c.key} type="button" className={'sch-opt' + (chosen.includes(c.key) ? ' active' : '')} aria-pressed={chosen.includes(c.key)}
+                onClick={() => setChosen(chosen.length === 1 && chosen[0] === c.key ? [] : [c.key])}>
+                <span className="sch-txt">{c.label}</span><span className="sch-n">{chanCount[c.key] || 0}</span>
               </button>
-            )}
-          </span>
-          <div className="cal-tray-items">
-            {(allLate ? late : late.slice(0, LATE_SHOWN)).map((t) => {
-              const st = statusesById[t.status_id]
+            ))}
+            </div>
+            <div className="sch-group">
+            <div className="sch-rail-h">{M.master ? tx('Who makes it') : tx('Who films')}</div>
+            <button type="button" className={'sch-opt' + (!filter.person ? ' active' : '')} aria-pressed={!filter.person} onClick={() => setFilter({ ...filter, person: '' })}>
+              <span className="sch-txt">{tx('Everyone')}</span>
+            </button>
+            {people.map((p) => {
+              const u = fullTeam[p.id] || {}
+              const on = filter.person === String(p.id)
               return (
-                <div
-                  key={t.id}
-                  className={'cal-tray-chip late-chip' + (isCarried(t, today) ? ' late-chip-carried' : '')}
-                  style={st ? { borderLeftColor: st.color } : undefined}
-                  onClick={() => setOpenItem(t)}
-                  title={`${t.title} — ${tx('due {day}', { day: dateLabel(t[M.dateField]) })}`}
-                >
-                  <span className="late-when">{dateLabel(t[M.dateField])}</span>
-                  <span className="ev-txt">{t.title}</span>
-                  {/* "Today" is a reschedule, so it asks what a drag asks —
-                      and a phone on the Master Calendar only looks. */}
-                  {(M.master ? mayMoveDay(t) : canMove) && !viewOnly && (
-                    <span className="tray-quick">
-                      <button type="button" className="qbtn" data-tip={tx("Move to today")}
-                        onClick={(e) => { e.stopPropagation(); setDay(t, M.dateField, today, false) }}>{tx("Today")}</button>
-                    </span>
-                  )}
-                </div>
+                <button key={p.id} type="button" className={'sch-opt sch-person' + (on ? ' active' : '')} aria-pressed={on}
+                  onClick={() => setFilter({ ...filter, person: on ? '' : String(p.id) })} title={p.name}>
+                  <Avatar name={p.name} color={u.color} src={u.avatar} size="xs" />
+                  <span className="sch-txt">{p.mine ? tx('Mine') : p.name.split(' ')[0]}</span><span className="sch-n">{p.n}</span>
+                </button>
               )
             })}
-          </div>
-        </div>
-      )}
+            </div>
+          </aside>
 
+          <div className="sch-grid">
       {/* The day, whole. On the Master Calendar it is the day's RELEASES —
           the same cards its square on the grid holds, named by channel —
           rather than every shoot and cut day that happens to fall on it. */}
@@ -718,6 +799,33 @@ export default function Schedule({ mode }) {
         {mayBulk && !pickedItems.length && <p className="stat-sub mcal-hint">{tx('Shift-click cards (or press Space on one) to pick several, then move them to a stage together.')}</p>}
         </>
       )}
+          </div>
+
+          {/* Right: the stages. Several at once — Idea and Editing together is
+              "what is still being made". */}
+          <aside className="sch-rail sch-rail-r" aria-label={tx('Stages')}>
+            <div className="sch-group">
+            <div className="sch-rail-h">{tx('Stages')}</div>
+            {stageList.map((st) => {
+              const on = filter.stages.includes(String(st.id))
+              return (
+                <button key={st.id} type="button" className={'sch-opt' + (on ? ' active' : '')} aria-pressed={on} onClick={() => toggleStage(st.id)}>
+                  {/* The stage as the mark every screen wears for it (round 17):
+                      the kind's icon, the stage's own colour as the dot. */}
+                  <StageMark status={st} text={false} className="sch-stage" />
+                  <span className="sch-txt">{tx(st.label)}</span><span className="sch-n">{stageCount[st.id] || 0}</span>
+                </button>
+              )
+            })}
+            {isOn(filter) && (
+              <button type="button" className="sch-clear" onClick={() => setFilter({ ...BLANK })}>
+                <X size={12} aria-hidden="true" /> {tx('Clear')}
+              </button>
+            )}
+            </div>
+          </aside>
+        </div>
+      </div>
 
       {/* Said out loud as it changes. Mounted from the start and never taken
           down: a live region inserted already holding its words is one most
@@ -734,7 +842,7 @@ export default function Schedule({ mode }) {
           <select className="select bulk-stage" value="" aria-label={tx('Move to stage')}
             onChange={(e) => { const st = stageList.find((x) => String(x.id) === e.target.value); if (st) setBulkStage(st) }}>
             <option value="">{tx('Move to stage')}…</option>
-            {stageList.map((st) => <option key={st.id} value={st.id}>{st.label}</option>)}
+            {stageList.map((st) => <option key={st.id} value={st.id}>{tx(st.label)}</option>)}
           </select>
           <button type="button" className="icon-btn" onClick={() => setPicked(new Set())} aria-label={tx('Let go of all')} data-tip={tx('Let go of all')}>
             <X size={16} />
