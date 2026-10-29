@@ -231,6 +231,32 @@ const CHANNELS = {
 }
 const UZB = new Set(['instagram_uzb', 'telegram_uzb'])
 
+// ---- --crowded: a day with forty late pieces (Q-03) ---------------------------------
+// Round 9's rule: check a screen on a crowded day before shipping it — forty
+// late pieces and long titles, not the six rows of the seed. The flag adds
+// forty pieces past their day on top of the usual six weeks, spread over every
+// channel and every seat (a shoot not done, an edit not handed in, a post not
+// written, a cover not drawn), with titles that wrap twice. The crowded-screens
+// workflow photographs every screen over it for the reviewers of a pull request.
+const CROWDED = process.argv.includes('--crowded')
+const LONG = [
+  'Полный разбор декабрьского SAT: что изменилось в Reading and Writing, какие задачи по Math встречались чаще всего и как наши ученики набрали 1500+',
+  'Интервью с выпускницей: из обычной школы в Ташкенте в Колумбийский университет с полной стипендией — три года подготовки, два пересданных экзамена и одно эссе',
+  'Родителям девятиклассников: что делать уже сейчас, чтобы через два года документы в университеты США были поданы спокойно и без паники в последнюю неделю',
+  'Пять мифов про IELTS, в которые верят почти все, и почему преподаватели SATashkent просят забыть о них в первую же неделю курса',
+  'Вебинар: как читать результаты SAT, что значит каждый балл, где в отчёте искать слабые места и как построить план на следующие восемь недель подготовки',
+  'Один день подготовки к SAT глазами студента: утренний пробник, разбор ошибок с преподавателем, вечерняя сессия по Math и то, что происходит между ними',
+  'Как выбрать между Early Decision, Early Action и Regular Decision, если вы ещё не уверены в своём первом выборе и боитесь потерять стипендию',
+  'Карусель: десять слов из SAT Reading, которые встречаются в каждом втором тексте, с примерами предложений, синонимами и типичными ловушками',
+  'Запись вебинара о стипендиях в Европе: Германия, Нидерланды, Италия — где учёба бесплатная, где почти бесплатная и что нужно сдавать для каждой страны',
+  'История Азиза: как после первого SAT на 1180 он за восемь месяцев дошёл до 1520 и получил офферы из четырёх университетов, включая два из первой двадцатки',
+]
+const LONG_UZ = [
+  "Dekabr SAT tahlili: Reading and Writing bo'limida nima o'zgardi, Math bo'limida qaysi masalalar ko'p uchradi va o'quvchilarimiz 1500+ ballni qanday oldi",
+  "Bitiruvchimiz bilan suhbat: Toshkentdagi oddiy maktabdan to'liq grant bilan Kolumbiya universitetiga — uch yillik tayyorgarlik, ikki marta qayta topshirilgan imtihon va bitta esse",
+  "To'qqizinchi sinf o'quvchilarining ota-onalariga: ikki yildan keyin AQSh universitetlariga hujjatlar oxirgi haftada vahimasiz topshirilishi uchun hozir nima qilish kerak",
+]
+
 const SCRIPTS = [
   'Хук: «Ты теряешь 100 баллов вот здесь». Три ошибки на доске, по 10 секунд на каждую. В конце — запись на пробный SAT.',
   'Студент в кадре рассказывает свою историю: с чего начал, какой был первый балл, что изменилось. Перебивки — класс, тетради, результат на экране.',
@@ -301,6 +327,26 @@ for (const [ch, c] of Object.entries(CHANNELS)) {
     }
   }
 }
+if (CROWDED) {
+  const keys = Object.keys(CHANNELS)
+  for (let i = 0; i < 40; i++) {
+    const ch = keys[i % keys.length]
+    const c = CHANNELS[ch]
+    // A reel where the channel films, a video on YouTube, else a post — a
+    // written channel has nobody to film.
+    const type = c.reel ? (i % 3 === 2 && c.post ? 'post' : 'reel') : c.video ? 'video' : 'post'
+    const filmed = type === 'reel' || type === 'video'
+    const designed = type === 'post' && !!c.des
+    const rel = -between(1, 24)
+    const rec = rel - between(2, 5)
+    // A filmed piece is late on its shoot or on its edit; a written or a drawn
+    // one in the making — never Ready, so it is late on everybody's day.
+    const stage = filmed ? (chance(0.55) ? 'Editing' : 'To shoot') : 'Editing'
+    const book = UZB.has(ch) ? LONG_UZ : LONG
+    const raw = `${book[i % book.length]} — ${i + 1}`
+    pieces.push({ ch, c, type, raw, title: UZB.has(ch) ? uz(raw) : raw, filmed, designed, rel, rec, stage, pin: {}, crowd: true })
+  }
+}
 
 // ---- in through the API, as the admin ---------------------------------------------------------
 const START = ['10:00', '10:30', '11:00', '14:00', '15:00', '16:30']
@@ -331,7 +377,7 @@ for (const p of pieces) {
   const row = await call(admin, 'POST', '/content', body)
   Object.assign(p, { id: row.id, body })
 }
-console.log(`✔ ${pieces.length} tasks`)
+console.log(`✔ ${pieces.length} tasks${CROWDED ? ` — ${pieces.filter((p) => p.crowd).length} of them the crowded day's, every one late` : ''}`)
 
 // ---- the history the API could only stamp "now" ----------------------------------------------
 const yes = (by, d) => ({ ack: 'yes', at: past(at(d, `${hour(9, 17)}:${pick(['00', '15', '30', '45'])}`)), by })
