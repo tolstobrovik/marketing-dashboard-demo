@@ -2415,6 +2415,10 @@ function TaskWindow({ item, statuses, onClose, onUpdate, onDelete, onChanged = n
     <CoachTask key={item.id} item={item} user={user} byKey={byKey} step={step} {...win}
       onClose={onClose} onChanged={changed} startEdit={!!askFor}
       mayEdit={(t) => mayEdit(user, t, stageRank)}
+      // T-01: Edit is the builder, at the step pressed; the sheet waits behind "All fields".
+      editIn={(t, out) => (
+        <TaskBuilder edit={t} startAt={out.step} statuses={statuses} onClose={out.cancel} onSaved={out.saved} onFull={out.full} />
+      )}
       edit={(t, out) => (
         <TaskSheet item={t} statuses={statuses} askFor={ask} closeRef={out.closeRef}
           onUpdate={onUpdate} onDelete={onDelete} onClose={() => { setAsk(null); out.done() }} onLeave={out.leave} />

@@ -4,7 +4,7 @@ import { api } from '../lib/api.js'
 import { addDaysISO, longDayLabel, serverNow } from '../lib/constants.js'
 import { toast } from '../lib/toast.js'
 import { tr as tx } from '../lib/i18n.jsx'
-import { KIND, Badge, Face, WhatsNew, firstName, dayInLine, dayShort, lateWords } from './CoachParts.jsx'
+import { KIND, Badge, Face, firstName, dayInLine, dayShort, lateWords } from './CoachParts.jsx'
 import Housekeeping from './Housekeeping.jsx'
 
 // ---- an admin's My Day: who does what today, who is stuck first -----------------
@@ -78,7 +78,7 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
   const chans = useMemo(() => {
     if (!data) return []
     const seen = new Set()
-    for (const x of [...data.overdue, ...data.dueToday, ...data.editAsap, ...data.timeline.flatMap((p) => p.items)])
+    for (const x of [...data.overdue, ...data.dueToday, ...data.editAsap, ...(data.seatless || []), ...data.timeline.flatMap((p) => p.items)])
       for (const c of x.channels || []) seen.add(c)
     return [...seen].filter((c) => byKey[c]).sort((a, b) => (byKey[a].label || a).localeCompare(byKey[b].label || b))
   }, [data, byKey])
@@ -88,6 +88,9 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
   const overdue = data.overdue.filter(on)
   const dueToday = data.dueToday.filter(on)
   const editAsap = data.editAsap.filter(on)
+  // Steps with nobody in the seat (the role play, 24 Oct 2026): the owner's
+  // "it was not assigned and I didn't see it" — first on the page, every day.
+  const seatless = (data.seatless || []).filter(on)
 
   // ---- the day moves waiting on an admin's yes ----
   const answer = async (a, approve) => {
@@ -218,6 +221,11 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
   const whose = (x) => names(x.owners) || tx('nobody yet')
   const GROUPS = [
     {
+      key: 'seatless', label: () => tx('Nobody holds these'), list: seatless,
+      why: () => tx('A step with no person on it. Nothing happens until somebody is named — press it and name them.'), none: () => tx('Every step has a person.'),
+      draw: (x) => row(x, KIND_OF[x.phase], `${WHAT[x.phase]()} · ${whose(x)}`, <Badge tone="wait">{tx('Name who')}</Badge>),
+    },
+    {
       key: 'late', label: () => tx('Overdue now'), list: overdue,
       why: () => tx('Past its day and not done. The most late first.'), none: () => tx('Nothing is late. Every step is on its day.'),
       draw: (x) => row(x, KIND_OF[x.phase], `${WHAT[x.phase]()} · ${whose(x)}`,
@@ -262,8 +270,6 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
           </select>
         </div>
       </section>
-
-      <WhatsNew />
 
       {asks.length > 0 && (
         <section className="co-ad-ask" aria-label={tx('Waiting on your answer')}>
@@ -357,10 +363,29 @@ export default function CoachAdminDay({ user, team, byKey, today, onOpen }) {
       {/* r11: how much is overdue, and what leaves the board next. */}
       <Housekeeping />
 
+      {/* Steps with nobody in the seat stand on the page, never folded: a
+          folded list is where "I didn't see it" lives (the role play, 24 Oct
+          2026). Drawn only when there is one — "every step has a person" is
+          not news. */}
+      {seatless.length > 0 && (
+        <section className="co-card co-grp co-ad-seatless" aria-label={GROUPS[0].label()}>
+          <div className="co-grp-h">
+            <h3>{GROUPS[0].label()}<span>{seatless.length}</span></h3>
+            <p>{GROUPS[0].why()}</p>
+          </div>
+          {(all.seatless ? seatless : seatless.slice(0, FIRST)).map(GROUPS[0].draw)}
+          {seatless.length > FIRST && (
+            <button type="button" className="co-link co-more-rows" onClick={() => setAll((a) => ({ ...a, seatless: !a.seatless }))}>
+              {all.seatless ? tx('Show fewer') : tx('Show all {n}', { n: seatless.length })}
+            </button>
+          )}
+        </section>
+      )}
+
       {/* Round 14: the deadline lists of before, under the schedule and folded — nothing is taken away. */}
       <details className="co-card sd-fold co-ad-dl" aria-label={tx('Deadlines')}>
         <summary>{tx('All deadlines')}<span className="count"> · {overdue.length + dueToday.length + editAsap.length}</span> <ChevronDown size={14} className="cd-done-caret" aria-hidden="true" /></summary>
-        {GROUPS.map((g) => (
+        {GROUPS.slice(1).map((g) => (
           <div key={g.key} className={'co-grp' + (g.list.length ? '' : ' none')}>
             <div className="co-grp-h">
               <h3>{g.label()}{g.list.length > 0 && <span>{g.list.length}</span>}</h3>

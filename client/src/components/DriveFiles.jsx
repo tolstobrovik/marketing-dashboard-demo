@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanZoom } from './Zoom.jsx'
 import { createPortal } from 'react-dom'
-import { Download, ExternalLink, Play, Image as ImageIcon, FileText, UploadCloud, X, Link2Off, Trash2 } from 'lucide-react'
+import { Download, ExternalLink, Play, Image as ImageIcon, FileText, UploadCloud, X, Link2Off, Trash2, RotateCcw } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { toast } from '../lib/toast.js'
-import { startUpload, cancelUpload, useUploads, sizeLabel } from '../lib/uploads.js'
+import { startUpload, cancelUpload, retryUpload, useUploads, sizeLabel } from '../lib/uploads.js'
 import { Thumb } from './DriveDrops.jsx'
 import { tr as tx } from '../lib/i18n.jsx'
 
@@ -22,6 +22,12 @@ import { tr as tx } from '../lib/i18n.jsx'
 // team's storage, never the sender's — and the file is on the task when it lands.
 const CHANGED = 'satashkent:drivefiles'
 export const driveFilesChanged = (taskId) => window.dispatchEvent(new CustomEvent(CHANGED, { detail: taskId }))
+// The hand-in box listens too: a file that lands on the task is one it can hand in.
+export const onDriveFilesChanged = (taskId, fn) => {
+  const on = (e) => { if (e.detail === taskId) fn() }
+  window.addEventListener(CHANGED, on)
+  return () => window.removeEventListener(CHANGED, on)
+}
 
 // Delete a file the board put on the Drive (r11, the owner): asked first, then
 // to the Drive's bin — Google keeps it there thirty days. The server says who
@@ -118,14 +124,18 @@ export function TaskFiles({ taskId, onList }) {
   const [open, setOpen] = useState(null)
   useEffect(() => {
     let alive = true
+    // A list Google would not give is not "Drive is off": whether Drive is
+    // connected is /drive/status's answer, and the window keeps its box and
+    // says the files are late (24 Oct 2026 — the box vanished with them).
     const load = () => api.get(`/drive/tasks/${taskId}/files`)
       .then((r) => { if (alive) { setList(r); onList?.(r) } })
-      .catch(() => { if (alive) { setList({ connected: false, files: [] }); onList?.({ connected: false, files: [], handled: [] }) } })
+      .catch(() => api.cached('/drive/status').then((s) => !!s?.connected).catch(() => false)
+        .then((connected) => { if (alive) { setList({ connected, files: [], error: true }); onList?.({ connected, files: [], handled: [] }) } }))
     load()
-    const on = (e) => { if (e.detail === taskId) load() }
-    window.addEventListener(CHANGED, on)
-    return () => { alive = false; window.removeEventListener(CHANGED, on) }
+    const off = onDriveFilesChanged(taskId, load)
+    return () => { alive = false; off() }
   }, [taskId]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (list?.error && list.connected) return <p className="co-none">{tx('Google Drive did not answer — the files will show when it does')}</p>
   if (!list?.files?.length) return null
   return (
     <>
@@ -216,12 +226,21 @@ export function DriveBox({ task, folder, register }) {
                 <span className="co-dbox-name">{j.name}</span>
                 {j.state === 'sending'
                   ? <span className="co-dbox-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={j.name}><i style={{ width: `${pct}%` }} /></span>
-                  : <span className="co-dbox-err">{j.state === 'cancelled' ? tx('Stopped') : j.error}</span>}
+                  : <span className="co-dbox-err">{j.state === 'cancelled' ? tx('Stopped') : tx(j.error || 'Did not upload')}</span>}
                 <span className="co-dbox-pct">{j.state === 'sending' ? `${pct}% · ${sizeLabel(j.size)}` : ''}</span>
-                <button type="button" className="co-btn co-btn-s co-btn-sm" onClick={() => (j.state === 'sending' ? cancelUpload(j.key) : setGone((g) => [...g, j.key]))}
-                  aria-label={j.state === 'sending' ? tx('Stop sending {name}', { name: j.name }) : tx('Hide')}>
-                  <X size={16} aria-hidden="true" />{j.state === 'sending' ? tx('Stop') : tx('Hide')}
-                </button>
+                {/* Failed: tried again under the same key, from where Google stopped (24 Oct 2026). */}
+                {j.state === 'failed' && j.file
+                  ? (
+                    <button type="button" className="co-btn co-btn-s co-btn-sm" onClick={() => retryUpload(j.key)} aria-label={tx('Try again')}>
+                      <RotateCcw size={16} aria-hidden="true" />{tx('Try again')}
+                    </button>
+                  )
+                  : (
+                    <button type="button" className="co-btn co-btn-s co-btn-sm" onClick={() => (j.state === 'sending' ? cancelUpload(j.key) : setGone((g) => [...g, j.key]))}
+                      aria-label={j.state === 'sending' ? tx('Stop sending {name}', { name: j.name }) : tx('Hide')}>
+                      <X size={16} aria-hidden="true" />{j.state === 'sending' ? tx('Stop') : tx('Hide')}
+                    </button>
+                  )}
               </li>
             )
           })}

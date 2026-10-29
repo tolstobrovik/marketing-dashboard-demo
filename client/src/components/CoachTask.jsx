@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X, ExternalLink, FileText, Send, Check, Clock, ArrowRight, PenLine, CalendarClock, Plus, Hand, Undo2, UploadCloud } from 'lucide-react'
 import HandIn from './HandIn.jsx'
+import PravkaList from './PravkaList.jsx'
+import FacePicker from './builder/FacePicker.jsx'
 import DayPick from './DayPick.jsx'
 import NextStep from './NextStep.jsx'
 import Booking from './Booking.jsx'
@@ -81,7 +83,7 @@ const listed = (v, one = null) => {
 
 export default function CoachTask({
   item, user, byKey, step, prefer = null, focus = null, next = null, onNext = null, onClose, onChanged,
-  mayEdit = null, edit = null, startEdit = false,
+  mayEdit = null, edit = null, editIn = null, startEdit = false,
 }) {
   const { stepOf, pipe, makingFor, reviewsOn } = step
   const phone = useIsPhone()
@@ -120,13 +122,19 @@ export default function CoachTask({
   // same blocks in the same order, as boxes to fill in, and back on Save or
   // Cancel. Built on the piece as the server has it now — never on the row the
   // window was opened from, which a press here may already have changed.
-  const [editing, setEditing] = useState(false)
-  const editOut = useRef(null)   // the form's own way out: it asks over unsaved changes
-  const canEditIt = !!edit && loaded && !!mayEdit?.(t)
+  // T-01 (23 Oct 2026): Edit opens the builder in edit mode (`editIn`), at
+  // the step pressed — a plan row's, else Idea; "All fields" on it opens the
+  // sheet (`edit`), which replaces the window's body as before, until T-05.
+  // The calendar's ask (`startEdit`) still lives in the sheet.
+  const [editing, setEditing] = useState(null)   // null | 'builder' | 'sheet'
+  const [editStep, setEditStep] = useState('')
+  const editOut = useRef(null)   // the sheet's own way out: it asks over unsaved changes
+  const canEditIt = !!(editIn || edit) && loaded && !!mayEdit?.(t)
   const editOpened = useRef(false)
   useEffect(() => {
-    if (startEdit && canEditIt && !editOpened.current) { editOpened.current = true; setEditing(true) }
-  }, [startEdit, canEditIt])
+    if (startEdit && canEditIt && !editOpened.current) { editOpened.current = true; setEditing(edit ? 'sheet' : 'builder') }
+  }, [startEdit, canEditIt]) // eslint-disable-line react-hooks/exhaustive-deps
+  const openEdit = (stepKey = '') => { setEditStep(stepKey); setEditing(editIn ? 'builder' : 'sheet') }
   const person = (id) => team.find((u) => u.id === id) || null
   const nameOf = (id) => firstName(person(id))
   // A sentence needs a subject even when a name has not loaded or a seat's
@@ -506,7 +514,7 @@ export default function CoachTask({
   const [leaving, setLeaving] = useState(null)   // null | 'close' | 'full' | 'next'
   const close = useCallback((sure) => {
     if (busy) return
-    if (editing) { editOut.current?.(); return }
+    if (editing === 'sheet') { editOut.current?.(); return }
     if (sure !== true && unsent()) { setLeaving('close'); return }
     setClosing(true)
     // Long enough for the panel to leave; at once for whoever asked for less motion.
@@ -540,8 +548,9 @@ export default function CoachTask({
     }, 60)
     return () => clearTimeout(t)
   }, [focus, loaded])
-  const leave = (how) => { setLeaving(null); if (how === 'edit') setEditing(true); else if (how === 'next') onNext(); else close(true) }
-  const goOut = (how) => { if (unsent()) setLeaving(how); else leave(how) }
+  // The step the builder opens at rides with the way out: a plan row's, else Idea.
+  const leave = (how, stepKey = editStep) => { setLeaving(null); if (how === 'edit') openEdit(stepKey); else if (how === 'next') onNext(); else close(true) }
+  const goOut = (how, stepKey = '') => { if (how === 'edit') setEditStep(stepKey); if (unsent()) setLeaving(how); else leave(how, stepKey) }
   // Tab stays inside the window while it is open.
   const trap = (e) => {
     if (e.key !== 'Tab' || !panel.current) return
@@ -728,7 +737,7 @@ export default function CoachTask({
           <>
             {holderRow(act.holder, does, [tx('round {n}', { n: act.round }),
               until ? tx('until {day}', { day: dayInLine(until, today) }) : gone && tx('was planned for {day}', { day: dayShort(reviewDue(t)) })].filter(Boolean).join(' · '))}
-            {openRound && <div className="co-quote"><b>{tx('What was asked')}</b><PravkaNote text={openRound.note} /></div>}
+            {openRound && <div className="co-quote"><b>{tx('What was asked')}</b><PravkaNote text={openRound.note} /><PravkaList taskId={t.id} round={openRound} /></div>}
             {nothing(tx('When {name} hands it in, it comes back under “Check it”.', { name }))}
             <div className="co-btns">
               {runs && <RemindButton user={user} taskId={t.id} person={person(act.holder)} today={today} onSent={addComment} />}
@@ -740,7 +749,7 @@ export default function CoachTask({
       case 'ownfix': return box(tx('Your step now'), (
         <>
           <p className="co-lead"><b>{tx('{name} asked you to change something.', { name: (openRound?.requested_name || tx('The team')).split(' ')[0] })}</b></p>
-          {openRound && <div className="co-quote"><b>{tx('What to change')}</b><PravkaNote text={openRound.note} /></div>}
+          {openRound && <div className="co-quote"><b>{tx('What to change')}</b><PravkaNote text={openRound.note} /><PravkaList taskId={t.id} round={openRound} canTick /></div>}
           <input className="input" value={fixLink} placeholder={tx('Link to the new version')} aria-label={tx('Link to the new version')}
             disabled={busy} onChange={(e) => { setFixLink(e.target.value); setErr('') }} />
           {fixLink.trim() && (
@@ -764,6 +773,32 @@ export default function CoachTask({
                   : tx('The task moves to «{stage}».', { stage: tx(act.to.label) }))}
         </>
       ))
+      case 'seat': {
+        // A making stop with nobody in the seat (the role play, 24 Oct 2026):
+        // the step is to name the person, here, without a trip through Edit.
+        // The server takes the seat the way the sheet gives it (PATCH).
+        const W = act.wait
+        const forKind = { shoot: 'shoot', cut: 'edit', artwork: 'design' }[W]
+        const role = { shoot: 'operator', cut: 'editor', artwork: 'designer' }[W]
+        const does = W === 'shoot' ? tx('Nobody is named to film it yet') : W === 'cut' ? tx('Nobody is named to edit it yet') : tx('Nobody is named to draw it yet')
+        const hats = team.filter((u) => (u.crew_roles || []).includes(role))
+        const people = (hats.length ? hats : team.filter((u) => u.role !== 'ambassador')).filter((u) => u.id !== 0)
+        const give = async (id) => {
+          if (busy || !id) return
+          setBusy(true); setErr('')
+          try { apply(await api.patch(`/content/${t.id}`, { [act.seat]: id })); toast(tx('Named — they see it on their day now')) }
+          catch (e) { setErr(e.message) } finally { setBusy(false) }
+        }
+        return box(canEditIt ? tx('Your step now') : tx('Not your step now'), (
+          <>
+            {holderRow(null, does, '')}
+            {canEditIt
+              ? <FacePicker label={W === 'shoot' ? tx('Who films it?') : W === 'cut' ? tx('Who edits it?') : tx('Who designs it?')} Icon={KIND[forKind].Icon} people={people} value={null} onChange={give} />
+              : nothing(tx('Whoever runs the piece names the person.'))}
+            {canEditIt && after(tx('They see it on their day at once, and are told.'))}
+          </>
+        ))
+      }
       case 'waiting': {
         // A seat that is held is never "nobody", even before its name has loaded.
         const known = nameOf(act.holder)
@@ -849,8 +884,8 @@ export default function CoachTask({
         <header className="co-p-head r14-tw-h" ref={headRef}>
           <span className={`r14-tw-kt co-kic ${K.cls}`} aria-hidden="true"><K.Icon size={18} /></span>
           <div className="r14-tw-tt">
-            {!editing && crumb && <p className="r14-tw-crumb">{crumb}</p>}
-            {editing ? <h2 id="co-win-t">{tx('Edit the task')}</h2> : (<>
+            {editing !== 'sheet' && crumb && <p className="r14-tw-crumb">{crumb}</p>}
+            {editing === 'sheet' ? <h2 id="co-win-t">{tx('Edit the task')}</h2> : (<>
             {/* The maker's colour is the dot by the title; its owner presses the dot
                 to pick one (no second row under the title — the owner, 13 Oct). */}
             <h2 id="co-win-t">
@@ -880,9 +915,9 @@ export default function CoachTask({
           </div>
           <div className="co-p-acts">
             {canEditIt && !editing && (
-              <button type="button" className="co-btn co-btn-q co-btn-sm co-edit-btn" onClick={() => goOut('edit')} aria-label={tx('Edit')}><PenLine size={16} aria-hidden="true" /><span>{tx('Edit')}</span></button>
+              <button type="button" className="co-btn co-btn-q co-btn-sm co-edit-btn" onClick={() => goOut('edit', '')} aria-label={tx('Edit')}><PenLine size={16} aria-hidden="true" /><span>{tx('Edit')}</span></button>
             )}
-            <button type="button" className="co-x" ref={closeBtn} onClick={() => close()} aria-label={editing ? tx('Cancel') : tx('Close the task')}><X size={18} aria-hidden="true" /></button>
+            <button type="button" className="co-x" ref={closeBtn} onClick={() => close()} aria-label={editing === 'sheet' ? tx('Cancel') : tx('Close the task')}><X size={18} aria-hidden="true" /></button>
           </div>
           {leaving && (
             <div className="co-note co-n-wait co-leave" role="alertdialog" aria-label={tx('You wrote something and did not send it.')}>
@@ -895,9 +930,15 @@ export default function CoachTask({
           )}
         </header>
 
-        {editing ? edit(t, {
+        {editing === 'builder' && editIn && editIn(t, {
+          step: editStep,
+          cancel: () => setEditing(null),
+          saved: (u) => { setEditing(null); if (u?.id) apply(u, { undoable: false }); else load() },
+          full: edit ? () => setEditing('sheet') : null,
+        })}
+        {editing === 'sheet' && edit ? edit(t, {
           closeRef: editOut,
-          done: () => { setEditing(false); load() },
+          done: () => { setEditing(null); load() },
           leave: (nextTask) => onClose(nextTask),
         }) : (
         <div className="co-p-body r14-tw-b">
@@ -952,7 +993,15 @@ export default function CoachTask({
               {/* Each link as a preview; pressed, it opens in the middle of the page. */}
               {refLinks.length > 0 && <div className="lp-row">{refLinks.map((u) => <LinkPreview key={u} url={u} onOpen={setLinkOpen} />)}</div>}
               <RefMedia task={t} user={user} plans={reach && can(user, 'manage_content')} onHeld={setRefHeld} adds={mayRef && refOpen} catchAll={mayRef}
-                onOther={drive?.connected ? (fs) => { if (!boxAdd.current) return false; setFileOpen(true); return boxAdd.current(fs) } : null}
+                onOther={drive && !drive.connected ? null : (fs) => {
+                  // The Drive box is the door for every file that is not a photo — also
+                  // before the window knows whether Drive is on, and before the box has
+                  // mounted (24 Oct 2026: a video dropped in that second became a
+                  // reference). Not there yet: say so, and keep the video out of the references.
+                  if (!boxAdd.current) { toast(tx('Still loading — drop it again in a moment')); return true }
+                  setFileOpen(true)
+                  return boxAdd.current(fs)
+                }}
                 legacy={Array.isArray(t.reference_photos) ? t.reference_photos : []}
                 onRemoveLegacy={reach && can(user, 'manage_content') ? async (i) => {
                   try {

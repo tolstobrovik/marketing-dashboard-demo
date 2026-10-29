@@ -130,30 +130,35 @@ export default function RefMedia({ task, initial, user, plans, legacy = [], onRe
   const other = useRef(onOther)
   other.current = onOther
   // Photos to this box; the rest to the Drive box when there is one. True when
-  // anything was taken.
+  // anything was taken. With a Drive box, a video is a reference only when it
+  // is dropped on this block itself (below) — never because the box said no
+  // (24 Oct 2026: a hand-in dropped a second too early became a reference).
   const route = (list) => {
     const all = [...(list || [])]
     const pics = all.filter((f) => isPicture(f))
     const rest = all.filter((f) => !isPicture(f))
     const sent = rest.length > 0 && !!other.current && other.current(rest) !== false
-    const mine = [...pics, ...(sent ? [] : rest.filter(isVideo))]
+    const mine = [...pics, ...(sent || other.current ? [] : rest.filter(isVideo))]
     if (mine.length) add(mine)
     return mine.length > 0 || sent
   }
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
   useEffect(() => {
     const said = (list) => { if ([...(list || [])].length) toast(tx('Only photos and videos go here'), 'err') }
     const onPaste = (e) => {
       if (!catchAll || e.defaultPrevented) return
       if (route(e.clipboardData?.files)) e.preventDefault()
     }
-    const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
     const onOver = (e) => { if (!hasFiles(e)) return; e.preventDefault(); if (catchAll) setOver(true) }
     const onLeave = (e) => { if (!e.relatedTarget) setOver(false) }
     const onDrop = (e) => {
       setOver(false)
       if (e.defaultPrevented || !hasFiles(e)) return
       e.preventDefault()
-      if (catchAll && !route(e.dataTransfer.files)) said(e.dataTransfer.files)
+      // Not the task's owner: the drop is not swallowed in silence (24 Oct
+      // 2026) — their own step's box takes a file; the rest is the owner's.
+      if (!catchAll) { toast(tx('Drop the file on your step’s box, or ask the task’s owner to add it')); return }
+      if (!route(e.dataTransfer.files)) said(e.dataTransfer.files)
     }
     document.addEventListener('paste', onPaste)
     window.addEventListener('dragover', onOver)
@@ -168,8 +173,16 @@ export default function RefMedia({ task, initial, user, plans, legacy = [], onRe
   }, [catchAll, task.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mayRemove = (m) => m.uploaded_by === user.id || plans
+  // Dropped on this block itself, a video IS a reference — the one place it is.
+  const onBlock = (e) => {
+    if (!adds || !hasFiles(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    setOver(false)
+    add(e.dataTransfer.files)
+  }
   return (
-    <div className="rm">
+    <div className="rm" onDragOver={(e) => { if (adds && hasFiles(e)) e.preventDefault() }} onDrop={onBlock}>
       <div className="rm-grid">
         {legacy.map((p, i) => (
           <span key={`l${i}`} className="rm-cell">

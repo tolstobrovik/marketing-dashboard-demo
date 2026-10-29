@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Link, useLocation } from 'react-router-dom'
-import { Shield, FileQuestion, LogOut, Briefcase, Sun, BarChart3, Clapperboard, UsersRound, ScrollText, Coins, Palette, SlidersHorizontal, GripVertical, Eye, EyeOff, Check, RotateCcw, ChevronUp, ChevronDown, Timer, GraduationCap, ChevronRight, Pin, CalendarRange, ClipboardList, UploadCloud, Home, CalendarDays, Plus, Menu, X, Scissors, Volume2, VolumeX, HelpCircle, Settings } from 'lucide-react'
+import { Shield, FileQuestion, LogOut, Briefcase, Sun, BarChart3, Clapperboard, UsersRound, ScrollText, Coins, Palette, SlidersHorizontal, GripVertical, Eye, EyeOff, Check, RotateCcw, ChevronUp, ChevronDown, GraduationCap, ChevronRight, Pin, CalendarRange, ClipboardList, UploadCloud, Home, CalendarDays, Plus, Menu, X, Scissors, Volume2, VolumeX, HelpCircle, Settings } from 'lucide-react'
 import { LogoLockup } from './Logo.jsx'
 import Avatar from './Avatar.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
@@ -141,15 +141,17 @@ export default function Sidebar({ user, onNavigate, onLogout, onGive = null, onF
       driveOn && shows('uploads') && { key: 'uploads', to: '/uploads', label: tx('Uploads'), icon: UploadCloud },
       // Files dropped into the Drive folders that named no task (Drops.jsx).
       driveOn && runsEverything && { key: 'drops', to: '/drops', label: tx('Lost files'), icon: FileQuestion },
-      // Overview is no longer in the menu: the daily list it was going to be
-      // — overdue, due today, edit ASAP — is the admin's My Day now
-      // (CoachAdminDay). The page itself still opens by its address.
+      // The Overview is gone (N-07): the daily list it was going to be —
+      // overdue, due today, edit ASAP — is the admin's My Day (CoachAdminDay),
+      // and its numbers are Numbers → Month (N-02).
       // Every channel at once: what is going out, and what is being filmed.
       shows('releases') && { key: 'releases', to: '/calendar', label: t('nav.releases'), icon: CalendarRange },
       shows('recordings') && { key: 'recordings', to: '/recordings', label: t('nav.recordings'), icon: Clapperboard },
       // The designer's own board, beside the work rather than inside a channel.
       shows('design') && { key: 'design', to: '/design', label: t('nav.design'), icon: Palette },
-      shows('sprints') && { key: 'sprints', to: '/sprints', label: t('nav.sprints'), icon: Timer },
+      // Sprints is in no menu (B-08): the page stays by its address until it
+      // retires, with a banner saying when; the backlog's ideas are kept in
+      // Settings → Records.
       // A campaign lives inside a project, so /campaigns/7 lights Projects up
       // rather than lighting nothing up.
       //
@@ -164,11 +166,12 @@ export default function Sidebar({ user, onNavigate, onLogout, onGive = null, onF
     ].filter(Boolean),
     channels: visible.map((c) => ({ key: `ch:${c.key}`, to: `/dept/${c.key}`, label: c.label, icon: iconFor(c.icon) })),
     numbers: [
-      shows('missed') && { key: 'missed', to: '/missed', label: t('nav.stats'), icon: BarChart3 },
-      shows('docs') && { key: 'docs', to: '/docs', label: t('nav.docs'), icon: Coins },
+      // One page (N-02): the month, who is late, the pay. A member's own pay
+      // is under their profile, not a door.
+      (isAdmin || shows('missed')) && { key: 'numbers', to: '/numbers', label: tx('Numbers'), icon: BarChart3 },
     ].filter(Boolean),
     people: [
-      isAdmin && shows('crew') && { key: 'crew', to: '/crew', label: t('nav.crew'), icon: Scissors },
+      // Post Production is Team → Workload (N-03).
       // The ambassador programme. Not switchable in Settings on purpose: this
       // is the only page some accounts have, and switching it off would strand
       // them on a board with nothing on it. And it is the one door here that
@@ -472,10 +475,7 @@ export const tailOf = (c, net) => {
 // scrolls only beyond it. With More open on a 900 px screen the channels used
 // to shrink to one visible row with their own scrollbar.
 //
-// Until N-01 to N-04 land, the doors they replace keep the places their
-// successors will take — Shoots under Calendar, Post Production under Team,
-// Statistics and Payment where Numbers will be — so the order moves once, not
-// twice. Settings (the Admin panel) is the gear at the foot beside the
+// The Calendar (N-01), Numbers (N-02) and Team (N-03) are one door each. Settings (the Admin panel) is the gear at the foot beside the
 // profile, not a work door. The saved menu of round 14 (`satashkent_menu_*`)
 // is no longer read.
 function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGive, onFold, rail, drawer }) {
@@ -535,27 +535,26 @@ function CoachSide({ user, groups, visible, upBadge, onNavigate, onLogout, onGiv
   const pick = (key) => all.find((it) => it.key === key)
   // My Day is /brief exactly: its calendar is the next row, not the same one.
   const day = { ...pick('brief'), icon: Home, end: true }
-  // One Calendar. The crew's is their own (their shoots, edits and artwork,
-  // CoachCalendar.jsx) — the only one they have; everybody else's is the
-  // Master Calendar, "Mine" first (the owner, 13 Oct).
+  // One Calendar row (N-01): the crew's is their own month, the Mine view of
+  // the calendar frame; everybody else's is the Master Calendar, whose frame
+  // holds Shooting and Releasing one press apart (round 15) — so there is no
+  // Shoots row, for an admin either.
   const crewSeat = ['editor', 'operator', 'designer', 'crew'].includes(user.role)
-  const master = pick('releases')
+  const master = pick('releases') || pick('recordings')
   const cal = crewSeat
     ? { key: 'mycal', to: '/brief/calendar', label: tx('Calendar'), icon: CalendarDays }
     : master && { ...master, label: tx('Calendar'), icon: CalendarDays }
-  const rec = pick('recordings')
-  const shoots = user.role === 'admin' && rec && { ...rec, label: tx('Shoots'), icon: Clapperboard }
   // Design is for whoever draws, and for an admin; a maker reaches a designer's
   // board through the piece.
   const draws = user.role === 'admin' || user.role === 'designer' || (user.crew_roles || []).includes('designer')
   const design = draws && pick('design')
   // The order a day runs: the day, the calendar, the channels, then who and
   // what — with the interim doors in their successors' places (see above).
-  const above = [cal, shoots].filter(Boolean)
-  const below = [design, pick('team'), pick('crew'), pick('missed'), pick('docs'), pick('projects')].filter(Boolean)
+  const above = [cal].filter(Boolean)
+  const below = [design, pick('team'), pick('numbers'), pick('projects')].filter(Boolean)
   const drawn = new Set(['brief', 'releases', 'recordings', 'design', 'admin', ...below.map((it) => it.key)])
   // Everything else this person may open, in the order the groups keep:
-  // Sprints, Uploads, Unmatched files, Ambassadors, Monthly notes.
+  // Uploads, Unmatched files, Ambassadors, Monthly notes.
   const rest = all.filter((it) => !drawn.has(it.key))
   const settings = pick('admin')
 

@@ -9,6 +9,7 @@ import { ContextMenuProvider } from './components/ContextMenu.jsx'
 import { I18nProvider } from './lib/i18n.jsx'
 import Toasts from './components/Toasts.jsx'
 import UploadsDock from './components/UploadsDock.jsx'
+import JarvisDock from './components/JarvisDock.jsx'
 import HeatmapOverlay from './components/HeatmapOverlay.jsx'
 import { applyTextSize } from './lib/textSize.js'
 import { applyTheme } from './lib/theme.js'
@@ -42,6 +43,7 @@ createRoot(document.getElementById('root')).render(
               <App />
               <Toasts />
               <UploadsDock />
+              <JarvisDock />
               <HeatmapOverlay />
               <HoverPreview />
             </ContextMenuProvider>

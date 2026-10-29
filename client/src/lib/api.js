@@ -1,4 +1,5 @@
 import { dataIsFresh } from './toast.js'
+import { tr } from './i18n.jsx'
 
 const TOKEN_KEY = 'satashkent_token'
 
@@ -107,8 +108,11 @@ async function request(path, { method = 'GET', body } = {}) {
     // Its answer is an HTML page, so `data.error` is empty and this used to
     // surface as "Request failed (413)": a number, about a photo, with nothing
     // to do about it. Say what it is and what to do instead.
+    // The server refuses in English; the reader is told in their language
+    // where the dictionary has the sentence (lib/i18n.jsx, "the server’s
+    // refusals"), and in English where it does not (24 Oct 2026).
     const err = new Error(
-      data.error
+      (data.error && tr(String(data.error)))
       || (res.status === 413
         ? 'Too big to send. The server in front of the app refuses anything over about 1 MB — try fewer or smaller pictures, or ask an admin to raise nginx\u2019s client_max_body_size to 10m.'
         : `Request failed (${res.status})`))
@@ -189,6 +193,13 @@ const noteWrite = (p, row) => {
   if (parts.length > 2 && !SELF_ANSWERING.has(parts[2])) return
   recentWrites.set(`${baseOf(p)}:${row.id}`, { at: Date.now(), row })
 }
+// A write to the board is said to the page, so the counts beside the channels
+// and anything else that polls on a timer can read again now rather than in
+// a minute (the sync hunt, 24 Oct 2026). Listeners: useChannelCounts.
+const wrote = (p) => {
+  if (!/^\/content\b/.test(p) || typeof window === 'undefined') return
+  try { window.dispatchEvent(new CustomEvent('satashkent:wrote', { detail: p })) } catch { /* old browser */ }
+}
 const noteDelete = (p) => {
   const parts = p.split('?')[0].split('/').filter(Boolean)
   const id = Number(parts[1])
@@ -211,7 +222,10 @@ function mergeRecent(path, fresh) {
     const id = Number(key.slice(cut + 1))
     if (v.row === null || !fits(v.row)) out = out.filter((x) => x.id !== id) // we deleted it, or it is not on this list
     else if (!out.some((x) => x.id === id)) out = [v.row, ...out] // stale body lost it
-    else out = out.map((x) => (x.id === id ? v.row : x)) // ours is newer
+    // Ours is newer — unless the body carries a row stamped after our write:
+    // somebody else moved it since, and our memory would hide their move for
+    // the rest of the grace (the sync hunt, 24 Oct 2026).
+    else out = out.map((x) => (x.id === id && !(x.updated_at && v.row.updated_at && String(x.updated_at) > String(v.row.updated_at)) ? v.row : x))
   }
   return out
 }
@@ -254,8 +268,8 @@ const pollView = conditionalGet
 export const api = {
   get: (p) => request(p),
   cached: cachedGet,
-  post: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'POST', body }); noteWrite(p, r); return r },
-  patch: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'PATCH', body }); noteWrite(p, r); return r },
+  post: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'POST', body }); noteWrite(p, r); wrote(p); return r },
+  patch: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'PATCH', body }); noteWrite(p, r); wrote(p); return r },
   // A whole-record replace. Not folded into the recent-write merge: what PUT
   // is used for here (a rate card) is not a row in any list the client polls,
   // and splicing it into one would be wrong.
@@ -263,7 +277,7 @@ export const api = {
   // A body on a DELETE is unusual but right where the removal itself needs
   // saying — a sprint task is dropped WITH a reason, and asking for the reason
   // in a second request would leave the two apart if the second one failed.
-  del: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'DELETE', body }); noteDelete(p); return r },
+  del: async (p, body) => { dropMemo(p); const r = await request(p, { method: 'DELETE', body }); noteDelete(p); wrote(p); return r },
   poll,
   pollView,
   blob,

@@ -8,6 +8,7 @@ import { toast } from '../lib/toast.js'
 import { VoicePlayer } from './VoiceNote.jsx'
 import Zoom from './Zoom.jsx'
 import PravkaNote from './PravkaNote.jsx'
+import PravkaList from './PravkaList.jsx'
 
 // The revision rounds of one task, under its delivery links: "Round 1",
 // "Round 2", … each with what was asked, the talk under it, and — once a new
@@ -57,6 +58,7 @@ export default function RevisionRounds({ taskId, revisions, onChange }) {
               Markdown (Pravka 2.0); PravkaNote draws them. */}
           <PravkaNote text={r.note} className="rround-note" />
           {r.voice_id ? <VoicePlayer id={r.voice_id} secs={r.voice_secs} /> : null}
+          <PravkaList taskId={taskId} round={r} />
           {r.photo && <span className="rev-shot"><Zoom src={r.photo_thumb || r.photo} full={r.photo} alt={tx('What needs changing')} /></span>}
           <span className="rround-meta">{tx('Asked by {name} · {day}', { name: r.requested_name || '—', day: day(r.created_at) })}</span>
         </div>

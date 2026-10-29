@@ -36,10 +36,13 @@ export default function TrackReports() {
     asText(`/track/report?${query}`).then((r) => r.text()).then((s) => { if (on) setText(s) }).catch((e) => { if (on) setText(e.message) })
     return () => { on = false }
   }, [query])
-  const download = async () => {
+  // The report as .md, or every line the day or week recorded (`raw`) — for
+  // when the totals are not enough to say who did what to which task.
+  const download = async (raw = false) => {
     try {
-      const blob = await (await asText(`/track/report?${query}&download=1`)).blob()
-      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `board-usage-${pick.week ? `week-${pick.week}` : pick.day}.md` })
+      const blob = await (await asText(raw ? `/track/raw?${query}` : `/track/report?${query}&download=1`)).blob()
+      const name = `board-${raw ? 'log' : 'usage'}-${pick.week ? `week-${pick.week}` : pick.day}.${raw ? 'ndjson' : 'md'}`
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name })
       document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(a.href), 1000)
     } catch (e) { toast(e.message, 'err') }
@@ -69,7 +72,8 @@ export default function TrackReports() {
           <optgroup label={tx('Days')}>{list.days.map((d) => <option key={d.day} value={`d:${d.day}`}>{d.day}</option>)}</optgroup>
           <optgroup label={tx('Weeks')}>{list.weeks.map((w) => <option key={w} value={`w:${w}`}>{tx('Week of {day}', { day: w })}</option>)}</optgroup>
         </select>
-        <button type="button" className="btn btn-sm" onClick={download} disabled={!text}><Download size={15} aria-hidden="true" /> {tx('Download .md')}</button>
+        <button type="button" className="btn btn-sm" onClick={() => download()} disabled={!text}><Download size={15} aria-hidden="true" /> {tx('Download .md')}</button>
+        <button type="button" className="btn btn-sm" onClick={() => download(true)} disabled={!text}><Download size={15} aria-hidden="true" /> {tx('Download the full log')}</button>
       </div>
       <p className="stat-sub">{tx('Pages opened, where people pressed and what the board said no with, by name — never what anybody typed. Read "What to improve first" at the top.')}</p>
       {pages.length > 0 && (

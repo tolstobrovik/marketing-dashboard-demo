@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageGuide from '../components/PageGuide.jsx'
+import CalendarViews from '../components/CalendarViews.jsx'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Send, Clapperboard, AlertCircle, CalendarDays, Download, CalendarRange, X, Layers } from 'lucide-react'
 import { api, cache } from '../lib/api.js'
@@ -637,14 +638,8 @@ export default function Schedule({ mode }) {
           no menus, nothing stacked above the grid but the late line. */}
       <div className={'card sch-frame' + (phone ? ' sch-phone' : '')}>
         <div className="sch-top">
-          <div className="sch-view" role="tablist" aria-label={tx('Calendar')}>
-            <button type="button" role="tab" aria-selected={!M.master} className={'sch-view-btn' + (!M.master ? ' active' : '')} onClick={() => go('recording')}>
-              <Clapperboard size={14} aria-hidden="true" /> {tx('Shooting')}
-            </button>
-            <button type="button" role="tab" aria-selected={!!M.master} className={'sch-view-btn' + (M.master ? ' active' : '')} onClick={() => go('release')}>
-              <Send size={14} aria-hidden="true" /> {tx('Releasing')}
-            </button>
-          </div>
+          {/* Shooting / Releasing, and Mine for whoever holds a seat (N-01). */}
+          <CalendarViews active={M.master ? 'release' : 'recording'} go={go} />
           {!phone && <span className="sch-lead">{M.lead}</span>}
           {!phone && <PageGuide page={M.master ? 'calendar' : 'schedule'} statusesById={statusesById} />}
           {/* The lens is the reason most of the month is empty, so it is said. */}

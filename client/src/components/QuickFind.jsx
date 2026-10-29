@@ -39,18 +39,16 @@ export default function QuickFind({ onClose }) {
   // at other kinds of account, its route sends them home, and a search that
   // finds a page only to land on the front page reads as a broken search.
   const pages = useMemo(() => [
-    isAdmin && shows('overview') && { label: 'Overview', to: '/overview' },
     { label: 'My Day', to: '/brief' },
     shows('releases') && { label: tx('Calendar'), to: '/calendar' },
     shows('recordings') && { label: tx('Recordings'), to: '/recordings' },
-    shows('missed') && { label: 'Statistics', to: '/missed' },
+    (isAdmin || shows('missed')) && { label: tx('Numbers'), to: '/numbers' },
     shows('design') && { label: tx('Design'), to: '/design' },
-    shows('docs') && { label: tx('Documents'), to: '/docs' },
+    shows('docs') && { label: tx('My pay'), to: '/profile#pay' },
     shows('projects') && { label: 'Projects', to: '/projects' },
     ...visible.map((c) => ({ label: c.label, to: `/dept/${c.key}` })),
-    isAdmin && shows('crew') && { label: tx('Post Production'), to: '/crew' },
-    isAdmin && shows('team') && { label: 'Team & hiring', to: '/team' },
-    isAdmin && { label: 'Admin', to: '/admin' },
+    isAdmin && shows('team') && { label: tx('Team'), to: '/team' },
+    isAdmin && { label: tx('Settings'), to: '/admin' },
     { label: 'My profile', to: '/profile' },
   ].filter(Boolean), [isAdmin, visible, shows])
 

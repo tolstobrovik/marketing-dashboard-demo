@@ -9,19 +9,16 @@ import Login from './pages/Login.jsx'
 // Pages load on demand: the first paint (login / app shell) ships only what
 // it needs, and each section's code arrives when it is first opened.
 const Department = lazy(() => import('./pages/Department.jsx'))
-const Overview = lazy(() => import('./pages/Overview.jsx'))
 const Projects = lazy(() => import('./pages/Projects.jsx'))
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail.jsx'))
 const CampaignDetail = lazy(() => import('./pages/CampaignDetail.jsx'))
 const Colours = lazy(() => import('./pages/Colours.jsx'))
 const Brief = lazy(() => import('./pages/Brief.jsx'))
-const Missed = lazy(() => import('./pages/Missed.jsx'))
 const Uploads = lazy(() => import('./pages/Uploads.jsx'))
 const Drops = lazy(() => import('./pages/Drops.jsx'))
 const Schedule = lazy(() => import('./pages/Schedule.jsx'))
-const Crew = lazy(() => import('./pages/Crew.jsx'))
 const Team = lazy(() => import('./pages/Team.jsx'))
-const Docs = lazy(() => import('./pages/Docs.jsx'))
+const Numbers = lazy(() => import('./pages/Numbers.jsx'))
 const Design = lazy(() => import('./pages/Design.jsx'))
 const Sprints = lazy(() => import('./pages/Sprints.jsx'))
 const SprintBacklog = lazy(() => import('./pages/SprintBacklog.jsx'))
@@ -71,8 +68,8 @@ function Protected({ children, adminOnly = false, page = null, ambassador = fals
 }
 
 // Everybody lands on My Day. An admin used to land on the Overview — a page
-// that has been in nobody's menu since the Coach look, so the first thing an
-// admin saw was a screen they could not get back to (round 10).
+// that was in nobody's menu since the Coach look, so the first thing an admin
+// saw was a screen they could not get back to (round 10); it is gone (N-07).
 function HomeRedirect() {
   const { user } = useAuth()
   if (user?.role === 'ambassador') return <Navigate to="/ambassador" replace />
@@ -110,14 +107,15 @@ export default function App() {
           }
         >
           <Route path="/" element={<HomeRedirect />} />
-          <Route
-            path="/overview"
-            element={
-              <Protected adminOnly page="overview">
-                <Overview />
-              </Protected>
-            }
-          />
+          {/* Numbers (N-02): Statistics (/missed), Payment (/docs), Admin →
+              Reports, Admin → Pay and the Overview (/overview, gone in N-07)
+              are one page with three tabs; which tabs a person has is the
+              page's own question. The old addresses land on it — a member's
+              Payment is "My pay" under their profile. */}
+          <Route path="/numbers" element={<Numbers />} />
+          <Route path="/overview" element={<Navigate to="/numbers" replace />} />
+          <Route path="/missed" element={<Navigate to="/numbers?tab=people" replace />} />
+          <Route path="/docs" element={<Navigate to="/profile#pay" replace />} />
           <Route path="/projects" element={<Protected page="projects"><Projects /></Protected>} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/campaigns/:id" element={<CampaignDetail />} />
@@ -136,27 +134,13 @@ export default function App() {
           <Route path="/calendar" element={<Protected page="releases"><Schedule mode="release" /></Protected>} />
           <Route path="/releases" element={<ToCalendar />} />
           <Route path="/recordings" element={<Protected page="recordings"><Schedule mode="recording" /></Protected>} />
-          <Route path="/missed" element={<Protected page="missed"><Missed /></Protected>} />
-          <Route
-            path="/crew"
-            element={
-              <Protected adminOnly page="crew">
-                <Crew />
-              </Protected>
-            }
-          />
-          <Route
-            path="/team"
-            element={
-              <Protected adminOnly page="team">
-                <Team />
-              </Protected>
-            }
-          />
+          {/* Team (N-03): People, Workload and Access as tabs; Post Production
+              (/crew) is the Workload tab and Admin → Team the Access tab. */}
+          <Route path="/team" element={<Protected adminOnly page="team"><Team /></Protected>} />
+          <Route path="/crew" element={<Navigate to="/team?tab=workload" replace />} />
           {/* The designer's own board — every piece waiting on artwork, with
               its Drive folder, its brief and somewhere to hand the file back. */}
           <Route path="/design" element={<Protected page="design"><Design /></Protected>} />
-          <Route path="/docs" element={<Protected page="docs"><Docs /></Protected>} />
           <Route path="/sprints" element={<Protected page="sprints"><Sprints /></Protected>} />
           <Route path="/sprints/backlog" element={<Protected page="sprints"><SprintBacklog /></Protected>} />
           <Route path="/profile" element={<Profile />} />

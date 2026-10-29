@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UploadCloud, ChevronDown, ChevronUp, X, Check, AlertCircle } from 'lucide-react'
-import { useUploads, cancelUpload, sizeLabel, etaOf } from '../lib/uploads.js'
+import { UploadCloud, ChevronDown, ChevronUp, X, Check, AlertCircle, RotateCcw } from 'lucide-react'
+import { useUploads, cancelUpload, retryUpload, sizeLabel, etaOf } from '../lib/uploads.js'
 import { useAuth } from '../lib/auth.jsx'
 import { tr as tx } from '../lib/i18n.jsx'
 
@@ -67,10 +67,15 @@ export default function UploadsDock() {
                 <span className="ud-sub">
                   {j.taskTitle} · {j.state === 'sending'
                     ? `${sizeLabel(j.sent)} / ${sizeLabel(j.size)}${etaOf(j) ? ` · ${etaOf(j)}` : ''}`
-                    : j.state === 'failed' ? (j.error || tx('Did not upload')) : sizeLabel(j.size)}
+                    : j.state === 'failed' ? tx(j.error || 'Did not upload') : sizeLabel(j.size)}
                 </span>
                 {j.state === 'sending' && <span className="ud-bar" aria-hidden="true"><i style={{ width: `${pct(j.sent, j.size)}%` }} /></span>}
               </button>
+              {/* A failed one is tried again from here (24 Oct 2026): the same
+                  file, the same session — it carries on where Google stopped. */}
+              {j.state === 'failed' && j.file && (
+                <button type="button" className="ud-icon" onClick={() => retryUpload(j.key)} aria-label={tx('Try again')} title={tx('Try again')}><RotateCcw size={16} aria-hidden="true" /></button>
+              )}
               {j.state === 'sending'
                 ? <button type="button" className="ud-icon" onClick={() => cancelUpload(j.key)} aria-label={tx('Stop this upload')}><X size={16} aria-hidden="true" /></button>
                 : j.state === 'done' ? <Check className="ud-ok" size={18} aria-label={tx('Uploaded')} />

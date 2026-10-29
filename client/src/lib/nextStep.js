@@ -27,7 +27,10 @@ export function pipelineOf(statuses) {
   const live = [...(statuses || [])].sort((a, b) => (a.sort - b.sort) || (a.id - b.id))
     .filter((s) => !isDeletedLabel(s.label))
   const at = (re) => live.findIndex((s) => re.test(String(s.label || '')))
-  return { live, shoot: at(GATE.shoot), edit: at(GATE.edit), review: at(GATE.review), final: live.findIndex((s) => s.is_final) }
+  // `dead`: the killed stage's ids, so a reading can tell a piece that was
+  // killed from one standing on a stage the board no longer has (24 Oct 2026).
+  const dead = (statuses || []).filter((s) => isDeletedLabel(s.label)).map((s) => s.id)
+  return { live, dead, shoot: at(GATE.shoot), edit: at(GATE.edit), review: at(GATE.review), final: live.findIndex((s) => s.is_final) }
 }
 
 // What kind of making a piece is. `filmed` and `designed` are the admin's crew

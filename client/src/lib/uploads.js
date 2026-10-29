@@ -13,8 +13,11 @@ import { uploadToDrive } from './driveUpload.js'
 // file on the same task again carries on from where Google stopped
 // (driveUpload.js keeps the session for a week).
 //
-// A job: { key, taskId, taskTitle, kind, name, size, sent, t0, state, error, link, fileName }
+// A job: { key, taskId, taskTitle, kind, name, size, sent, t0, state, error, status, link, fileName, file, onDone }
 //   state: 'sending' | 'done' | 'failed' | 'cancelled'
+//   `file` and `onDone` stay on a job that failed, so "Try again" can run the
+//   same upload under the same key (24 Oct 2026) — the session is in
+//   localStorage, so it carries on from the last byte Google kept.
 
 let jobs = []
 const listeners = new Set()
@@ -31,20 +34,26 @@ const guardTab = () => {
   })
 }
 
-export function startUpload({ task, kind, file, onDone }) {
-  guardTab()
-  const key = `${task.id}:${kind}:${file.name}:${file.size}:${Date.now()}`
+// The same file (name, size, last changed) on the same task and job, still
+// going: one upload, one Google session. Dropped twice — on the hand-in box
+// and then on the task — it used to be two uploads feeding one session, each
+// undoing the other's pieces (24 Oct 2026).
+const sameFile = (j, task, kind, file) => j.state === 'sending' && j.taskId === task.id && j.kind === kind
+  && j.name === file.name && j.size === file.size && (j.lastModified || 0) === (file.lastModified || 0)
+
+function run(key) {
+  const job = jobs.find((j) => j.key === key)
+  if (!job) return
+  const { file, onDone } = job
   const ctrl = new AbortController()
   ctrls.set(key, ctrl)
-  jobs = [{ key, taskId: task.id, taskTitle: task.title, kind, name: file.name, size: file.size, sent: 0, t0: Date.now(), state: 'sending' }, ...jobs]
-  emit()
   // Progress arrives many times a second; the list is redrawn at most ~6.
   // Speed is measured from where THIS attempt began: a resumed upload that
   // starts at 10 GB has not sent 10 GB in its first second.
   let last = 0
   let from = null
   uploadToDrive({
-    taskId: task.id, kind, file, signal: ctrl.signal,
+    taskId: job.taskId, kind: job.kind, file, signal: ctrl.signal,
     onProgress: ({ sent }) => {
       const now = Date.now()
       if (from === null) { from = sent; put(key, { sent, from, t0: now }); return }
@@ -56,9 +65,31 @@ export function startUpload({ task, kind, file, onDone }) {
     put(key, { state: 'done', sent: file.size, link: out.link, fileName: out.name, fileId: out.id })
     onDone?.(out)
   }).catch((e) => {
-    put(key, e.cancelled ? { state: 'cancelled' } : { state: 'failed', error: e.message })
+    put(key, e.cancelled ? { state: 'cancelled' } : { state: 'failed', error: e.message, status: e.status || null })
   }).finally(() => ctrls.delete(key))
+}
+
+export function startUpload({ task, kind, file, onDone }) {
+  guardTab()
+  const twin = jobs.find((j) => sameFile(j, task, kind, file))
+  if (twin) return twin.key
+  const key = `${task.id}:${kind}:${file.name}:${file.size}:${Date.now()}`
+  jobs = [{
+    key, taskId: task.id, taskTitle: task.title, kind, name: file.name, size: file.size, lastModified: file.lastModified || 0,
+    sent: 0, t0: Date.now(), state: 'sending', file, onDone,
+  }, ...jobs]
+  emit()
+  run(key)
   return key
+}
+
+// A failed upload, tried again under its own key: same file, same task, the
+// session it had — so it picks up where Google stopped, not from nothing.
+export function retryUpload(key) {
+  const job = jobs.find((j) => j.key === key)
+  if (!job || job.state === 'sending' || !job.file) return
+  put(key, { state: 'sending', error: null, status: null, sent: 0, t0: Date.now(), from: null })
+  run(key)
 }
 
 export const cancelUpload = (key) => ctrls.get(key)?.abort()

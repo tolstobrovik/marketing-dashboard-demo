@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { HousekeepingSettings } from '../components/Housekeeping.jsx'
-import { useSearchParams } from 'react-router-dom'
-import {
-  Users, PanelLeft, KanbanSquare, FileBarChart, Plus, Pencil, Trash2, AlertCircle,
-  ShieldCheck, ArrowUp, ArrowDown, Check, Megaphone, ListChecks, Clapperboard, Send, Pin, Network,
-  X, CheckSquare, Scissors, Video, History, Eye, EyeOff, Wallet, Gauge, Palette, UserCheck, RotateCcw, Languages, Loader2,
-  SlidersHorizontal, Activity, Banknote, CheckCircle2, Undo2, HardDrive, ExternalLink,
-} from 'lucide-react'
+import { useSearchParams, useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { Users, PanelLeft, KanbanSquare, FileBarChart, Plus, Pencil, Trash2, AlertCircle, ShieldCheck, ArrowUp, ArrowDown, Check, Megaphone, ListChecks, Clapperboard, Send, Pin, Network, X, CheckSquare, Scissors, Video, History, Eye, EyeOff, Wallet, Gauge, Palette, UserCheck, RotateCcw, Languages, Loader2, SlidersHorizontal, Activity, Banknote, CheckCircle2, Undo2, HardDrive, ExternalLink, Download } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { rewardIfFinished } from '../lib/reward.js'
 import { toast, loadFailed } from '../lib/toast.js'
@@ -14,17 +9,15 @@ import { markDone } from '../lib/finish.js'
 import Fold from '../components/Fold.jsx'
 import { useChannels } from '../lib/channels.jsx'
 import RolePicker from '../components/RolePicker.jsx'
-import { CHANNEL_ICONS, iconFor, PERMISSIONS, CONTENT_TYPES, todayISO, addDaysISO, dateLabel, typeInfo, onColor, deptColor, tashkentDay } from '../lib/constants.js'
+import { CHANNEL_ICONS, iconFor, PERMISSIONS, CONTENT_TYPES, todayISO, addDaysISO, dateLabel, typeInfo, onColor, deptColor, tashkentDay, longDayLabel } from '../lib/constants.js'
 import Avatar from '../components/Avatar.jsx'
 import Modal from '../components/Modal.jsx'
-import { PayReportButton } from '../components/PayReport.jsx'
 import ContentModal from '../components/ContentModal.jsx'
 import { useContextMenu } from '../components/ContextMenu.jsx'
 import Whiteboard from '../components/Whiteboard.jsx'
 import { activityLine } from '../lib/activity.js'
 import { tr as tx, locale } from '../lib/i18n.jsx'
 import { StageDot, Dot, Dots } from '../components/Dot.jsx'
-import KpiCard from '../components/KpiCard.jsx'
 import TrackReports from '../components/TrackReports.jsx'
 
 // Distinct hues so member avatars/chips are tellable apart (matches Profile).
@@ -39,71 +32,118 @@ const colorFor = (seed) => {
 
 // Round 10: thirteen tabs wrapped onto two rows. The five an admin sets the
 // team's work up with are tabs; the rest (`more`) are one menu beside them.
-const TABS = [
+// Settings (N-04, TZ of 19 October 2026, section 4.0): the Admin panel had
+// five tabs and a "More…" select with eight more entries. Four groups now,
+// each one page of the sections that belong together; what was a tab is a
+// section with an anchor, so every old ?tab= link still lands on its section.
+//
+//   Board          the planned update and the reminders first, then the
+//                  channels, the pipeline, the task form and who must be
+//                  on a task, and the pay ladders
+//   Team           the Telegram bridge, and which pages each kind of account has
+//   Integrations   Google Drive, language help
+//   Records        history, usage, every open task (until B-03 makes it a
+//                  lens of the channel board), the whiteboard
+const GROUPS = [
+  { key: 'board', label: 'Board', icon: KanbanSquare },
   { key: 'team', label: 'Team', icon: Users },
-  { key: 'tasks', label: 'Tasks', icon: ListChecks },
-  { key: 'channels', label: 'Channels', icon: PanelLeft },
-  { key: 'pipeline', label: 'Pipeline', icon: KanbanSquare },
-  { key: 'settings', label: 'Settings', icon: SlidersHorizontal },
-  { key: 'board', label: 'Whiteboard', icon: Network, more: true },
-  { key: 'reports', label: 'Reports', icon: FileBarChart, more: true },
-  { key: 'pay', label: 'Payroll', icon: Wallet, more: true },
-  { key: 'ai', label: 'Language help', icon: Languages, more: true },
-  { key: 'usage', label: 'Usage', icon: Activity, more: true },
-  { key: 'history', label: 'History', icon: History, more: true },
-  { key: 'telegram', label: 'Telegram', icon: Send, more: true },
-  { key: 'drive', label: 'Google Drive', icon: HardDrive, more: true },
+  { key: 'integrations', label: 'Integrations', icon: HardDrive },
+  { key: 'records', label: 'Records', icon: History },
 ]
+// The old tabs, as sections of the groups. A link to ?tab=drive lands on
+// Integrations with the Drive section in view (the Drive sign-in comes back
+// to exactly that address, drive-suite pins it). The old Whiteboard tab was
+// ?tab=board, which is the Board group now; its section is #whiteboard.
+const SECTIONS = [
+  { key: 'channels', group: 'board', label: 'Channels' },
+  { key: 'pipeline', group: 'board', label: 'Pipeline' },
+  { key: 'settings', group: 'board', label: 'The task form' },
+  { key: 'telegram', group: 'team', label: 'Telegram' },
+  { key: 'pages', group: 'team', label: 'Pages' },
+  { key: 'drive', label: 'Google Drive', group: 'integrations' }, // drive-suite reads this pair
+  { key: 'ai', group: 'integrations', label: 'Language help' },
+  { key: 'history', group: 'records', label: 'History' },
+  { key: 'usage', group: 'records', label: 'Usage' },
+  { key: 'tasks', group: 'records', label: 'Tasks' },
+  { key: 'whiteboard', group: 'records', label: 'Whiteboard' },
+]
+const Sec = ({ id, children }) => <section id={`adm-${id}`} className="adm-sec">{children}</section>
 
 export default function Admin() {
-  // The tab is in the URL, so a tab can be linked to. It was internal state
-  // only, which meant every route into this page landed on Team and left the
-  // person to find the rest — including the Payment page's own link to the
-  // payroll, which is the whole reason this exists.
-  const [params, setParams] = useSearchParams()
+  // The group is in the URL, so a group can be linked to; a section is the
+  // hash. An old tab key is turned into its group and section once, on the
+  // way in.
+  const [params] = useSearchParams()
+  const { hash } = useLocation()
+  const navigate = useNavigate()
   const wanted = params.get('tab')
-  const [tab, setTabState] = useState(() => (TABS.some((t) => t.key === wanted) ? wanted : 'team'))
-  const setTab = (key) => {
-    setTabState(key)
-    setParams((p) => { const next = new URLSearchParams(p); next.set('tab', key); return next }, { replace: true })
-  }
-  // …and a link followed while already on the page changes the tab too.
+  const old = SECTIONS.find((s) => s.key === wanted && !GROUPS.some((g) => g.key === wanted))
   useEffect(() => {
-    if (wanted && TABS.some((t) => t.key === wanted) && wanted !== tab) setTabState(wanted)
+    if (!old) return
+    const next = new URLSearchParams(params)
+    next.set('tab', old.group)
+    navigate({ search: `?${next}`, hash: `#${old.key}` }, { replace: true })
   }, [wanted]) // eslint-disable-line react-hooks/exhaustive-deps
-  const [reportChannel, setReportChannel] = useState('all')
-  // A channel row's "Report" button jumps straight into that channel's report.
-  const openReport = (key) => { setReportChannel(key); setTab('reports') }
+  const tab = GROUPS.some((g) => g.key === wanted) ? wanted : 'board'
+  const setTab = (key) => {
+    const next = new URLSearchParams(params)
+    next.set('tab', key)
+    navigate({ search: `?${next}`, hash: '' }, { replace: true })
+  }
+  // The section the hash names comes into view once its group has drawn.
+  useEffect(() => {
+    if (!hash) return
+    // After the sections above it have fetched and grown — a section that
+    // scrolled into view at 350 ms was pushed down by the Drive card's answer.
+    const t = setTimeout(() => document.getElementById(`adm-${hash.slice(1)}`)?.scrollIntoView({ block: 'start' }), 900)
+    return () => clearTimeout(t)
+  }, [hash, tab])
+  // A channel row's "Report" button opens that channel's month on Numbers
+  // (N-02): the reports and the payroll live there now, not in this panel.
+  const openReport = (key) => navigate(`/numbers?tab=month&channel=${key}`)
+  if (wanted === 'reports' || wanted === 'pay') return <Navigate to={`/numbers?tab=${wanted === 'pay' ? 'pay' : 'month'}`} replace />
+  // …and the team's table is Team → Access (N-03).
+  if (wanted === 'team' && !old) return <Navigate to="/team?tab=access" replace />
   return (
     <>
       <div className="tabs">
-        {TABS.filter((t) => !t.more).map((t) => {
-          const Icon = t.icon
+        {GROUPS.map((g) => {
+          const Icon = g.icon
           return (
-            <button key={t.key} className={'tab' + (tab === t.key ? ' active' : '')} onClick={() => setTab(t.key)}>
-              <Icon size={16} /> {tx(t.label)}
+            <button key={g.key} className={'tab' + (tab === g.key ? ' active' : '')} onClick={() => setTab(g.key)}>
+              <Icon size={16} /> {tx(g.label)}
             </button>
           )
         })}
-        <select className={'select adm-more' + (TABS.some((t) => t.more && t.key === tab) ? ' on' : '')} aria-label={tx('More')}
-          value={TABS.some((t) => t.more && t.key === tab) ? tab : ''} onChange={(e) => { if (e.target.value) setTab(e.target.value) }}>
-          <option value="">{tx('More')}…</option>
-          {TABS.filter((t) => t.more).map((t) => <option key={t.key} value={t.key}>{tx(t.label)}</option>)}
-        </select>
       </div>
-      {tab === 'team' && <TeamTab />}
-      {tab === 'tasks' && <TasksTab />}
-      {tab === 'board' && <Whiteboard />}
-      {tab === 'channels' && <ChannelsTab onOpenReport={openReport} />}
-      {tab === 'pipeline' && <PipelineTab />}
-      {tab === 'settings' && <SettingsTab />}
-      {tab === 'reports' && <ReportsTab channel={reportChannel} setChannel={setReportChannel} />}
-      {tab === 'pay' && <PayTab />}
-      {tab === 'ai' && <AiTab />}
-      {tab === 'usage' && <UsageTab />}
-      {tab === 'history' && <HistoryTab />}
-      {tab === 'telegram' && <TelegramTab />}
-      {tab === 'drive' && <DriveTab />}
+      {tab === 'board' && (
+        <>
+          <Sec id="notice"><SettingsTab only={['notice', 'reminders']} /></Sec>
+          <Sec id="channels"><ChannelsTab onOpenReport={openReport} /></Sec>
+          <Sec id="pipeline"><PipelineTab /></Sec>
+          <Sec id="settings"><SettingsTab only={['taskform']} /></Sec>
+        </>
+      )}
+      {tab === 'team' && (
+        <>
+          <Sec id="telegram"><TelegramTab /></Sec>
+          <Sec id="pages"><SettingsTab only={['pages']} /></Sec>
+        </>
+      )}
+      {tab === 'integrations' && (
+        <>
+          <Sec id="drive"><DriveTab /></Sec>
+          <Sec id="ai"><AiTab /></Sec>
+        </>
+      )}
+      {tab === 'records' && (
+        <>
+          <Sec id="history"><HistoryTab /></Sec>
+          <Sec id="usage"><UsageTab /></Sec>
+          <Sec id="tasks"><TasksTab /></Sec>
+          <Sec id="whiteboard"><Whiteboard /></Sec>
+        </>
+      )}
     </>
   )
 }
@@ -494,6 +534,40 @@ function Reminders({ members }) {
 /* Every change anyone made, newest first, written as a sentence — "Mirabbos
    changed the shoot start: 10:00 → 11:00 on «Campus tour»". The task link
    opens the piece; deleted tasks keep their name on the record. */
+// The sprint backlog, kept (B-08). The server writes the ideas as a dated
+// Markdown note (GET /fields/records/sprint-backlog) and keeps the last one
+// it wrote, so the note outlives the Sprints pages and their tables.
+function BacklogNote() {
+  const [note, setNote] = useState(null)
+  useEffect(() => { api.get('/fields/records/sprint-backlog').then(setNote).catch(() => {}) }, [])
+  if (!note?.count) return null
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([note.markdown], { type: 'text/markdown;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `sprint-backlog-${note.day}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+  }
+  return (
+    <div className="card card-pad adm-backlog">
+      <div className="section-head" style={{ marginTop: 0 }}>
+        <h2>{tx('Sprint backlog')}</h2>
+        <span className="stat-sub">{tx('Kept {day} · {n} ideas', { day: longDayLabel(note.day), n: note.count })}</span>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="btn btn-sm" onClick={download}><Download size={13} /> {tx('Download as Markdown')}</button>
+      </div>
+      <ul className="adm-backlog-list">
+        {note.items.map((it) => (
+          <li key={it.id}><b>{it.title}</b>{it.added_by ? <span className="stat-sub"> · {it.added_by}</span> : null}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function HistoryTab() {
   const [rows, setRows] = useState([])
   const [who, setWho] = useState('all')
@@ -509,6 +583,7 @@ function HistoryTab() {
   const when = (ts) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tashkent', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ts))
   return (
     <>
+      <BacklogNote />
       <div className="section-head">
         <h2>{tx('History')}</h2><span className="count">· {shown.length}</span>
         <span style={{ flex: 1 }} />
@@ -786,9 +861,11 @@ function TasksTab() {
     try { await deleteContent(item) } catch (e) { alert(e.message) }
   }
 
+  // A hook, so above the loading return: below it, React saw one hook more
+  // once the list had loaded and warned on every Records page (N-04).
+  const { openMenu } = useContextMenu()
   if (loading) return <div className="app-loading"><span className="spinner" /></div>
 
-  const { openMenu } = useContextMenu()
   const rowCtx = { statusesById, usersById, byKey, toggle, setOpenItem, togglePin, removeTask, openMenu }
 
   return (
@@ -842,1010 +919,7 @@ function TasksTab() {
   )
 }
 
-/* ==================== TEAM (+ permissions) ==================== */
-const BLANK_USER = { name: '', username: '', password: '', role: 'member', crew_roles: [], departments: [], admin_channels: [], crew_channels: [], daily_cap: 0, permissions: {} }
 
-// Who owns sprints. Kept beside the people table because that is where the
-// question is asked: this person, yes or no. An admin sets it; being an admin
-// is not the same as being one.
-function useSprintOwners() {
-  const [owners, setOwners] = useState([])
-  useEffect(() => { api.get('/sprints/owners').then(setOwners).catch(() => setOwners([])) }, [])
-  const toggle = async (id, on) => {
-    try { setOwners(await api.put(`/sprints/owners/${id}`, { owner: on })) }
-    catch (e) { toast(e.message, 'err') }
-  }
-  return { owners, toggle }
-}
-
-function TeamTab() {
-  const { owners, toggle: toggleOwner } = useSprintOwners()
-  const { channels } = useChannels()
-  const [users, setUsers] = useState([])
-  const [modal, setModal] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState(BLANK_USER)
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [usernameTouched, setUsernameTouched] = useState(false)
-
-  useEffect(() => { api.get('/users').then(setUsers) }, [])
-
-  const openAdd = () => { setForm(BLANK_USER); setUsernameTouched(false); setEditing(null); setErr(''); setModal(true) }
-  const openEdit = (u) => {
-    setForm({ name: u.name, username: u.username, password: '', role: u.role, crew_roles: [...(u.crew_roles || [])], departments: u.departments, admin_channels: [...(u.admin_channels || [])], crew_channels: [...(u.crew_channels || [])], daily_cap: u.daily_cap || 0, permissions: { ...u.permissions } })
-    setUsernameTouched(true); setEditing(u.id); setErr(''); setModal(true)
-  }
-
-  const save = async () => {
-    setBusy(true); setErr('')
-    try {
-      if (editing) {
-        // The crew's scope and daily ceiling belong to a crew hat. Somebody
-        // moved off one keeps neither: sent as they were, a crew member made a
-        // member carried a hidden channel list and cap into the new role.
-        const crewKind = ['editor', 'operator', 'designer', 'crew'].includes(form.role)
-        const body = { name: form.name, username: form.username, role: form.role, crew_roles: form.crew_roles, departments: form.departments, admin_channels: form.admin_channels || [], crew_channels: crewKind ? form.crew_channels || [] : [], daily_cap: crewKind ? Number(form.daily_cap) || 0 : 0, permissions: form.permissions }
-        if (form.password) body.password = form.password
-        const u = await api.patch(`/users/${editing}`, body)
-        setUsers((prev) => prev.map((x) => (x.id === editing ? u : x)))
-      } else {
-        const u = await api.post('/users', { ...form, color: colorFor(form.username || form.name) })
-        setUsers((prev) => [...prev, u])
-      }
-      setModal(false)
-    } catch (e) { setErr(e.message) } finally { setBusy(false) }
-  }
-  const del = async (u) => {
-    if (!confirm(`Remove ${u.name}?`)) return
-    try { await api.del(`/users/${u.id}`); setUsers((prev) => prev.filter((x) => x.id !== u.id)) }
-    catch (e) { alert(e.message) }
-  }
-
-  const toggleDept = (k) =>
-    setForm((f) => ({ ...f, departments: f.departments.includes(k) ? f.departments.filter((d) => d !== k) : [...f.departments, k] }))
-  const toggleAdminChan = (k) =>
-    setForm((f) => {
-      const cur = f.admin_channels || []
-      return { ...f, admin_channels: cur.includes(k) ? cur.filter((d) => d !== k) : [...cur, k] }
-    })
-  const toggleCrewChan = (k) =>
-    setForm((f) => {
-      const cur = f.crew_channels || []
-      return { ...f, crew_channels: cur.includes(k) ? cur.filter((d) => d !== k) : [...cur, k] }
-    })
-  const togglePerm = (k) =>
-    setForm((f) => ({ ...f, permissions: { ...f.permissions, [k]: !f.permissions[k] } }))
-
-  return (
-    <>
-      <div className="section-head">
-        <h2>{tx('Team members')}</h2>
-        <span className="count">· {users.length}</span>
-        <span className="spacer" />
-        <button className="btn btn-primary btn-sm" onClick={openAdd}><Plus size={15} /> {tx('Add member')}</button>
-      </div>
-      <div className="card table-wrap">
-        <table className="tbl">
-          <thead><tr><th>{tx('Member')}</th><th>{tx('Role')}</th><th>{tx('Channels')}</th><th>{tx('Permissions')}</th><th>{tx('Sprint owner')}</th>
-                  <th style={{ textAlign: 'right' }} /></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="u-row">
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Avatar name={u.name} color={u.color} src={u.avatar} size="sm" />
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{u.name}</div>
-                      <div className="stat-sub">@{u.username}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  {u.role === 'admin' ? <span className="badge"><ShieldCheck size={12} /> {(u.admin_channels || []).length ? 'Channel admin' : 'Admin'}</span>
-                    : (u.crew_roles || []).length > 0 ? <span className="badge badge-muted"><Video size={12} /> {(u.crew_roles || []).map((c) => c[0].toUpperCase() + c.slice(1)).join(' & ')}</span>
-                    : <span className="badge badge-muted">{tx('Member')}</span>}
-                </td>
-                <td>
-                  <div className="dept-chips">
-                    {u.role === 'admin'
-                      ? ((u.admin_channels || []).length
-                        ? u.admin_channels.map((d) => {
-                          const c = channels.find((x) => x.key === d)
-                          return <span key={d} className="badge">{c?.label || d}</span>
-                        })
-                        : <span className="stat-sub">{tx('All channels')}</span>)
-                      : (u.crew_roles || []).length > 0
-                        ? <span className="stat-sub">{tx('Their work, any channel')}</span>
-                        : u.departments.map((d) => {
-                            const c = channels.find((x) => x.key === d)
-                            return <span key={d} className="badge badge-muted">{c?.label || d}</span>
-                          })}
-                  </div>
-                </td>
-                <td>
-                  {u.role === 'admin'
-                    ? <span className="stat-sub">{tx('Everything')}</span>
-                    : (u.crew_roles || []).length > 0
-                      ? <span className="stat-sub">{tx('Move own work')}</span>
-                      : <span className="stat-sub">{PERMISSIONS.filter((p) => u.permissions[p.key]).length}/{PERMISSIONS.length} enabled</span>}
-                </td>
-                <td>
-                  {/* Owners may promote an idea into a sprint and change a
-                      sprint after it freezes. Nothing else in the module cares
-                      who you are. */}
-                  <label className="checkbox-chip chip-sm">
-                    <input type="checkbox" checked={owners.includes(u.id)}
-                      onChange={(e) => toggleOwner(u.id, e.target.checked)} />
-                    {owners.includes(u.id) ? tx('Owner') : tx('No')}
-                  </label>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                    <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(u)} data-tip={tx('Edit member, channels & rights')} aria-label="Edit"><Pencil size={15} /></button>
-                    {/* Deleting somebody's account had exactly the weight of
-                        editing it: two buttons side by side, one of them red,
-                        on every row of a long table. It is still one press
-                        away — on the row you are actually pointing at. */}
-                    <button className="btn btn-danger btn-sm btn-icon u-onhover" onClick={() => del(u)} data-tip={tx('Remove this member')} data-tip-left="" aria-label={tx('Delete')}><Trash2 size={15} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {modal && (
-        <Modal
-          title={editing ? tx('Edit member') : tx('Add member')}
-          onClose={() => setModal(false)}
-          footer={<>
-            <button className="btn" onClick={() => setModal(false)}>{tx('Cancel')}</button>
-            <button className="btn btn-primary" onClick={save} disabled={busy}>{editing ? 'Save changes' : 'Create member'}</button>
-          </>}
-        >
-          {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-          <div className="field"><label>{tx('Name')}</label>
-            <input className="input" value={form.name} autoFocus placeholder={tx('e.g. Dilnoza Karimova')}
-              onChange={(e) => {
-                const name = e.target.value
-                setForm((f) => ({ ...f, name, username: usernameTouched ? f.username : slug(name) }))
-              }} />
-          </div>
-          <div className="field"><label>{tx('Username')} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{tx('— used to sign in')}</span></label>
-            <input className="input" type="text" autoCapitalize="none" autoCorrect="off" value={form.username} placeholder={'dilnoza'}
-              onChange={(e) => { setUsernameTouched(true); setForm({ ...form, username: e.target.value }) }} />
-          </div>
-          <div className="field"><label>{editing ? 'New password (leave blank to keep)' : 'Password'}</label>
-            <input className="input" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={tx('Set a password')} />
-          </div>
-          <div className="field"><label>{tx('Role')}</label>
-            <RolePicker role={form.role} crewRoles={form.crew_roles}
-              onChange={(role, crew_roles) => setForm({ ...form, role, crew_roles })} />
-          </div>
-          {form.role === 'admin' && (
-            <div className="field">
-              <label>{tx('Which channels do they run?')}</label>
-              <div className="checkbox-row">
-                {channels.map((c) => (
-                  <label key={c.key} className={'checkbox-chip' + ((form.admin_channels || []).includes(c.key) ? ' on' : '')}>
-                    <input type="checkbox" checked={(form.admin_channels || []).includes(c.key)} onChange={() => toggleAdminChan(c.key)} />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-              <div className="cm-hint">
-                {(form.admin_channels || []).length === 0
-                  ? 'Nothing ticked — an admin of the whole board: every channel, plus accounts, channels and the pipeline rules.'
-                  : 'They run these channels only. Full reach over the work there — the dates, the crew, publishing — and no access to accounts, channels or the pipeline rules.'}
-              </div>
-            </div>
-          )}
-          {form.role === 'member' && (
-            <>
-              <div className="field"><label>{tx('Channels')}</label>
-                <div className="checkbox-row">
-                  {channels.map((c) => (
-                    <label key={c.key} className={'checkbox-chip' + (form.departments.includes(c.key) ? ' on' : '')}>
-                      <input type="checkbox" checked={form.departments.includes(c.key)} onChange={() => toggleDept(c.key)} />
-                      {c.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="field"><label>{tx('Permissions')}</label>
-                <div className="perm-list">
-                  {PERMISSIONS.map((p) => (
-                    <button key={p.key} type="button" className={'perm-row' + (form.permissions[p.key] ? ' on' : '')} onClick={() => togglePerm(p.key)}>
-                      <span className={'perm-toggle' + (form.permissions[p.key] ? ' on' : '')}>{form.permissions[p.key] && <Check size={12} strokeWidth={3.5} />}</span>
-                      <span>
-                        <span className="perm-label">{p.label}</span>
-                        <span className="perm-desc">{p.desc}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-          {form.role === 'admin' && <span className="stat-sub">{tx('Admins can access every channel and do everything.')}</span>}
-          {!['member', 'admin'].includes(form.role) && (
-            <>
-              <div className="field">
-                <label>{tx('Which channels do they work on?')}</label>
-                <div className="checkbox-row">
-                  {channels.map((c) => (
-                    <label key={c.key} className={'checkbox-chip' + ((form.crew_channels || []).includes(c.key) ? ' on' : '')}>
-                      <input type="checkbox" checked={(form.crew_channels || []).includes(c.key)} onChange={() => toggleCrewChan(c.key)} />
-                      {c.label}
-                    </label>
-                  ))}
-                </div>
-                <div className="cm-hint">
-                  {(form.crew_channels || []).length === 0
-                    ? 'Nothing ticked — they can be given work on any channel.'
-                    : 'They only appear in the crew pickers on these channels, and cannot be assigned work on the others.'}
-                </div>
-              </div>
-              <div className="field">
-                <label>{tx('How many pieces a day?')}</label>
-                <input className="input" type="number" min="0" max="50" style={{ maxWidth: 120 }}
-                  value={form.daily_cap ?? 0}
-                  onChange={(e) => setForm({ ...form, daily_cap: e.target.value })} />
-                <div className="cm-hint">
-                  {Number(form.daily_cap) > 0
-                    ? `At most ${Number(form.daily_cap)} for one day — handing them one more is refused, so it is caught while it can still be moved. Counted on the day the work is due FROM them: an edit day, a shoot day, an artwork day, never the release.`
-                    : 'No limit, which is what everybody was before this existed. Set a number and over-assignment is refused rather than discovered on the day.'}
-                </div>
-              </div>
-              <span className="stat-sub">
-                Production crew: no channels, no metrics, no task creation. They sign in to a daily brief of
-                the tasks where they hold a hat ({(form.crew_roles || []).join(', ') || 'crew'}) — set on each task’s
-                Crew row — with deadlines and hours, and they move that work through the pipeline themselves.
-              </span>
-            </>
-          )}
-        </Modal>
-      )}
-    </>
-  )
-}
-
-/* ==================== PAY ==================== */
-/* What people are paid, worked out from what the board already knows.
- *
- * Payroll was being rebuilt by hand every month from numbers this system had
- * to the day: who shot what, who cut what, and how much of it landed on the
- * day they promised. The rates are the part no code can know — they differ per
- * person and they change — so they are edited here and stored as data. One
- * default card everybody starts from, and a card per person that overrides it.
- *
- * Nothing here invents a KPI. It multiplies counts by rates an admin typed. */
-const RATE_ROWS = [
-  // `roles` is who this line is about. A card opened for an editor shows the
-  // editing rates and hides the nine that decide nothing for them — the sheet
-  // had fourteen boxes on every card, which is how half of them stayed at
-  // whatever the default was. Nothing is deleted: "Show every line" brings
-  // them all back, and a rate already set is always shown.
-  { key: 'base', label: 'Base', hint: 'Paid for the period whatever the count', roles: null },
-  { key: 'per_shoot', label: 'Per shoot', hint: 'Each shoot handed to the editor', roles: ['operator'] },
-  { key: 'per_shoot_reel', label: 'Per shoot · reel', hint: 'An afternoon', roles: ['operator'] },
-  { key: 'per_shoot_youtube', label: 'Per shoot · YouTube', hint: 'A day', roles: ['operator'] },
-  { key: 'per_shoot_target', label: 'Per shoot · target', hint: 'A paid creative', roles: ['operator'] },
-  { key: 'per_edit', label: 'Per edit', hint: 'Each edit handed to review', roles: ['editor'] },
-  { key: 'per_edit_reel', label: 'Per edit · reel', hint: 'An afternoon', roles: ['editor'] },
-  { key: 'per_edit_youtube', label: 'Per edit · YouTube', hint: 'A week', roles: ['editor'] },
-  { key: 'per_edit_target', label: 'Per edit · target', hint: 'A paid creative', roles: ['editor'] },
-  { key: 'per_design', label: 'Per design', hint: 'Each piece they designed', roles: ['designer'] },
-  { key: 'per_publish', label: 'Per piece run', hint: 'Each piece of theirs that reached Editing — a written post once it is published — where its kind has no rule of its own below', roles: ['member', 'admin', 'reviewer'] },
-  { key: 'per_review', label: 'Per sign-off', hint: 'Each piece they signed off', roles: ['reviewer', 'admin'] },
-  // Being in the piece. A target video is shot by one person and carried by
-  // another standing in front of the camera; only one of them was ever paid.
-  { key: 'per_face', label: 'Per appearance', hint: 'Each piece they are the face of', roles: ['ambassador', 'member'] },
-  { key: 'per_face_reel', label: 'Per appearance · reel', hint: '', roles: ['ambassador', 'member'] },
-  { key: 'per_face_youtube', label: 'Per appearance · YouTube', hint: '', roles: ['ambassador', 'member'] },
-  { key: 'per_face_target', label: 'Per appearance · target', hint: 'Fronting a paid creative', roles: ['ambassador', 'member'] },
-  { key: 'quota', label: 'Pieces a month', hint: 'What a full month of this job looks like. 0 means no quota', plain: true, roles: null },
-  { key: 'quota_bonus', label: 'Quota bonus', hint: 'Paid whole when they reach it', roles: null },
-  { key: 'ontime_bonus', label: 'On-time bonus', hint: 'Paid whole, or not at all', roles: null },
-  { key: 'ontime_target', label: 'On-time target %', hint: 'The share of deliveries that earns the bonus', pct: true, roles: null },
-  { key: 'late_penalty', label: 'Per late piece', hint: 'Taken off for each delivery after its promised day', roles: null },
-  // What the work was WORTH. Both are 0 on a card nobody has set, so a board
-  // that does not pay on views never has to think about them.
-  { key: 'per_1k_views', label: 'Per 1,000 views', hint: 'On kinds with no rule of their own below — the rest are paid by their own rule', roles: ['member', 'admin'] },
-  { key: 'views_target', label: 'Views a month', hint: 'What a full month of watching looks like. 0 means no target', plain: true, roles: ['member', 'admin'] },
-  { key: 'views_bonus', label: 'Views bonus', hint: 'Paid whole when their month reaches that many views', roles: ['member', 'admin'] },
-]
-// The kinds of piece that can be priced apart, and what each rule is made of.
-// The roles a card can belong to, in the words the team uses for them.
-const ROLE_WORD = {
-  operator: 'Operator', editor: 'Editor', designer: 'Designer', reviewer: 'Reviewer',
-  ambassador: 'Ambassador', member: 'Team member', admin: 'Admin', crew: 'Crew',
-}
-const KIND_ROWS = [
-  { key: 'post', label: 'Posts' },
-  { key: 'reel', label: 'Reels' },
-  { key: 'youtube', label: 'YouTube' },
-  { key: 'target', label: 'Targets' },
-]
-const BLANK_CARD = {
-  currency: 'UZS', base: 0, per_shoot: 0, per_edit: 0, per_design: 0, per_publish: 0, per_review: 0,
-  quota: 0, quota_bonus: 0, ontime_bonus: 0, ontime_target: 90, late_penalty: 0,
-  per_1k_views: 0, views_target: 0, views_bonus: 0, pillow: 0, scheme: 'piece',
-  per_shoot_reel: 0, per_edit_reel: 0, per_shoot_youtube: 0, per_edit_youtube: 0,
-  per_shoot_target: 0, per_edit_target: 0,
-  per_face: 0, per_face_reel: 0, per_face_youtube: 0, per_face_target: 0,
-  kind_rules: {},
-}
-
-// Which of the rate rows an arrangement actually pays on. A card set to a
-// fixed salary has eleven piece rates on it that decide nothing, and leaving
-// them on screen is the form inviting somebody to set a number that will never
-// be paid. They are not deleted — switching back brings them straight back.
-const SCHEME_SHOWS = {
-  piece: { rates: true, pillow: false },
-  fixed: { rates: false, pillow: false },
-  kpi: { rates: false, pillow: false },
-  fixed_kpi: { rates: false, pillow: false },
-  pillow: { rates: true, pillow: true },
-  pillow_kpi: { rates: false, pillow: true },
-}
-
-/* ---- working a card out from one number ----
- *
- * Typing eleven rates from scratch, per person, is how a pay scheme never
- * gets set up at all. Almost nobody thinks in rates; everybody thinks in "an
- * editor's month is worth about four million". So that is the question asked,
- * plus roughly how many pieces a full month is, and the shape is applied:
- *
- *   60%  base            paid for turning up and being available
- *   25%  piecework       spread over the quota, so a full month lands on the
- *                        full package and every piece past it pays on top
- *   10%  quota bonus     for doing the whole job
- *    5%  on-time bonus   for doing it when promised
- *   late costs half a piece, so slipping is felt but does not wipe out the day
- *
- * These are a starting shape, not a rule. Every line stays editable, and
- * nothing is saved until Save is pressed — the numbers just appear in the
- * boxes where they can be argued with.
- */
-const SHAPE = { base: 0.60, piece: 0.25, quota: 0.10, ontime: 0.05 }
-const JOBS = [
-  { key: 'editor', label: tx('Editor'), rate: 'per_edit', monthly: 4000000, quota: 20 },
-  { key: 'operator', label: tx('Operator'), rate: 'per_shoot', monthly: 4000000, quota: 20 },
-  { key: 'designer', label: tx('Designer'), rate: 'per_design', monthly: 3500000, quota: 25 },
-  { key: 'planner', label: 'Runs the channel', rate: 'per_publish', monthly: 5000000, quota: 30 },
-]
-// Round to something a person would actually write down.
-const tidy = (n, step = 10000) => Math.max(0, Math.round(n / step) * step)
-function workOutCard(job, monthly, quota, currency) {
-  const q = Math.max(1, Math.round(Number(quota) || 1))
-  const m = Math.max(0, Number(monthly) || 0)
-  const perPiece = tidy((m * SHAPE.piece) / q, 5000)
-  return {
-    ...BLANK_CARD,
-    currency,
-    base: tidy(m * SHAPE.base),
-    [job.rate]: perPiece,
-    quota: q,
-    quota_bonus: tidy(m * SHAPE.quota),
-    ontime_bonus: tidy(m * SHAPE.ontime),
-    ontime_target: 90,
-    late_penalty: tidy(perPiece / 2, 5000),
-  }
-}
-
-// Money reads as money: grouped thousands, no decimals for whole sums. UZS
-// runs to millions, so an ungrouped 2200000 is unreadable at a glance.
-const money = (n, cur) => `${Math.round(Number(n) || 0).toLocaleString('en-US').replace(/,/g, ' ')} ${cur || ''}`.trim()
-
-function PayTab() {
-  const t = todayISO()
-  const monthStart = t.slice(0, 8) + '01'
-  const prevEnd = addDaysISO(monthStart, -1)
-  const prevStart = prevEnd.slice(0, 8) + '01'
-  const PRESETS = [
-    { key: 'month', label: tx('This month'), from: monthStart, to: t },
-    { key: 'prev', label: tx('Last month'), from: prevStart, to: prevEnd },
-    { key: 'custom', label: 'Custom' },
-  ]
-  const [preset, setPreset] = useState('month')
-  const [from, setFrom] = useState(monthStart)
-  const [to, setTo] = useState(t)
-  const [data, setData] = useState(null)
-  const [rules, setRules] = useState([])
-  const [card, setCard] = useState(null) // { userId | 'default', name, form }
-  const [kpiFor, setKpiFor] = useState(null) // { id, name } — whose month is open
-  const [plan, setPlan] = useState(null) // null | { job, monthly, quota } — the calculator
-  // The arrangements there are, served rather than copied: the card that
-  // OFFERS one and the run that PAYS on it have to agree about what it does.
-  const [schemes, setSchemes] = useState({})
-  const [closing, setClosing] = useState(null) // { month, paid_at, note } — the month being recorded as paid
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
-  // Every line, including the ones this role is never paid on.
-  const [showAll, setShowAll] = useState(false)
-  // The roles this team actually has, so the sheet offers a card per role.
-  const [payRoles, setPayRoles] = useState([])
-
-  const range = useMemo(() => {
-    const p = PRESETS.find((x) => x.key === preset)
-    return preset === 'custom' ? { from, to } : { from: p.from, to: p.to }
-  }, [preset, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const load = () => {
-    api.get(`/reports/pay?from=${range.from}&to=${range.to}`).then(setData).catch(() => setData(null))
-    api.get('/reports/pay/rules').then(setRules).catch(() => setRules([]))
-  }
-  useEffect(() => { api.get('/reports/pay/schemes').then((d) => { setSchemes(d?.schemes || {}); setPayRoles(d?.roles || []) }).catch(() => {}) }, [])
-  // Which parts of the card the chosen arrangement actually pays on.
-  const shows = SCHEME_SHOWS[card?.form?.scheme || 'piece'] || SCHEME_SHOWS.piece
-  useEffect(() => { load() }, [range.from, range.to]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Opening a card starts from whatever this person is being paid on now:
-  // their own card, else their role's, else the board default. Copying the
-  // role card into the form is deliberate — the admin sees the numbers that
-  // are actually in force rather than a blank sheet that would quietly
-  // overwrite them with zeroes on Save.
-  const openCard = (userId, name, payRole = null) => {
-    const isDefault = userId === 'default'
-    const isRole = String(userId).startsWith('role:')
-    const roleKey = isRole ? String(userId).slice(5) : payRole
-    const row = rules.find((r) => (isDefault ? (!r.user_id && !r.role)
-      : isRole ? (!r.user_id && r.role === roleKey)
-        : r.user_id === userId))
-    const roleRow = !isDefault && !isRole && roleKey ? rules.find((r) => !r.user_id && r.role === roleKey) : null
-    const fallback = isDefault ? BLANK_CARD : (roleRow || rules.find((r) => !r.user_id && !r.role) || BLANK_CARD)
-    setErr('')
-    setPlan(null)
-    setShowAll(false)
-    setCard({
-      userId, name, own: !!row, role: roleKey || null,
-      from: row ? 'own' : roleRow ? 'role' : 'default',
-      form: { ...BLANK_CARD, ...(row || fallback), kind_rules: { ...((row || fallback).kind_rules || {}) } },
-    })
-  }
-  const saveCard = async () => {
-    if (!card) return
-    setBusy(true); setErr('')
-    try {
-      await api.put(`/reports/pay/rules/${card.userId}`, card.form)
-      setCard(null)
-      load()
-    } catch (e) { setErr(e.message) } finally { setBusy(false) }
-  }
-  const dropCard = async () => {
-    if (!card || card.userId === 'default') return
-    if (!confirm(tx('Put {name} back on the card their role is paid on?', { name: card.name }))) return
-    setBusy(true)
-    try { await api.del(`/reports/pay/rules/${card.userId}`); setCard(null); load() }
-    catch (e) { setErr(e.message) } finally { setBusy(false) }
-  }
-
-  const total = (data?.people || []).reduce((a, p) => a + p.total, 0)
-  const cur = data?.currency || 'UZS'
-  // The month the range sits in, and whether it has already been closed.
-  // Everything above this line is a CALCULATOR; closing a month is the only
-  // thing on the page that writes down what actually went out.
-  const month = data?.month || range.to.slice(0, 7)
-  const settled = (data?.people || []).filter((p) => p.payout)
-  // Who "Record as paid" will actually write down, by the server's own rule: somebody
-  // with no record yet who is a payment at all. A person already recorded keeps
-  // the payslip they were paid against.
-  const toRecord = (data?.people || []).filter((p) => !p.payout && p.source !== 'none' && (p.total !== 0 || p.delivered > 0))
-  // The month is closed when nobody is LEFT to record — not when every row has
-  // a record. The list also holds people who are never a payment (on a card,
-  // nothing delivered, nothing owed); counting them kept the head at "4 of 9"
-  // and the button on offer for a month that was finished.
-  const allSettled = settled.length > 0 && toRecord.length === 0
-  const monthOver = month < todayISO().slice(0, 7)
-  // A payment is recorded against a MONTH — that is what the row is keyed on,
-  // and what somebody is asked "was I paid for August?" about. Both presets
-  // are whole months, so the button is there where it belongs; a hand-typed
-  // range that is not one would put the range's total in front of somebody
-  // and write the month's down, which is two different numbers and only one
-  // of them on screen.
-  const monthEnd = new Date(Date.UTC(+month.slice(0, 4), +month.slice(5, 7), 0)).toISOString().slice(0, 10)
-  const wholeMonth = range.from === `${month}-01`
-    && (range.to === monthEnd || range.to === todayISO())
-
-  // "2026-09" is a filename, not a month. Anything a person reads says
-  // September.
-  const monthWords = (m) => new Date(`${m}-01T00:00:00Z`)
-    .toLocaleDateString(locale(), { month: 'long', year: 'numeric', timeZone: 'UTC' })
-
-  const closeMonth = async () => {
-    if (!closing) return
-    setBusy(true); setErr('')
-    try {
-      const out = await api.post('/reports/pay/payouts', {
-        month: closing.month, paid_at: closing.paid_at, note: closing.note,
-      })
-      setClosing(null)
-      toast(tx('{n} people recorded as paid for {month}', { n: out.recorded, month: closing.month }))
-      load()
-    } catch (e) { setErr(e.message) } finally { setBusy(false) }
-  }
-  const reopenMonth = async () => {
-    if (!confirm(tx('Re-open {month}? The recorded figures are deleted and the month goes back to being worked out live.', { month: monthWords(month) }))) return
-    setBusy(true)
-    try { await api.del(`/reports/pay/payouts/${month}/all`); toast(tx('{month} re-opened', { month: monthWords(month) })); load() }
-    // Said where it can be read: `err` is drawn only inside the two dialogs,
-    // and neither is open here, so a refused re-open used to say nothing.
-    catch (e) { toast(e.message, 'err') } finally { setBusy(false) }
-  }
-
-  return (
-    <>
-      <div className="section-head">
-        <h2>{tx('Pay')}</h2>
-        <span className="count">{tx('· worked out from what was delivered')}</span>
-        <span className="spacer" />
-        <button className="btn btn-sm" onClick={() => openCard('default', 'everybody')}>
-          <Wallet size={14} /> {tx('Default rates')}
-        </button>
-        <div className="pill-group" style={{ marginLeft: 10 }}>
-          {PRESETS.map((p) => (
-            <button key={p.key} className={'pill' + (preset === p.key ? ' active' : '')} onClick={() => setPreset(p.key)}>{p.label}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* ---- a card per role ----
-          The sheet was thirty-five copies of the same numbers, which is how
-          half of them ended up out of date. Set the editor card once and every
-          editor is paid on it; anybody who negotiated their own terms gets a
-          card of their own, and their row says so. */}
-      {payRoles.length > 0 && (
-        <div className="pay-roles">
-          <span className="stat-sub">{tx('Cards by role — everybody on that role is paid this unless they have one of their own')}</span>
-          <div className="pill-group">
-            {payRoles.map((r) => {
-              const set = rules.some((x) => !x.user_id && x.role === r)
-              return (
-                <button key={r} className={'pill' + (set ? ' active' : '')}
-                  onClick={() => openCard(`role:${r}`, tx(ROLE_WORD[r] || r))}>
-                  {tx(ROLE_WORD[r] || r)}{set ? '' : ` · ${tx('not set')}`}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      {preset === 'custom' && (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-          <input className="input" type="date" style={{ width: 160 }} value={from} onChange={(e) => setFrom(e.target.value)} />
-          <input className="input" type="date" style={{ width: 160 }} value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-      )}
-
-      {!data ? <div className="app-loading"><span className="spinner" /></div> : (
-        <>
-          {!data.hasDefault && (
-            <div className="card card-pad pay-empty">
-              <b>{tx('No rates set yet.')}</b>
-              <span className="stat-sub">
-                {tx('Nothing here is guessed. Set the default card — a base, and what a shoot, an edit and a design are each worth — and every person is worked out from it. Anybody paid differently gets a card of their own on their row.')}
-              </span>
-              <button className="btn btn-primary btn-sm" onClick={() => openCard('default', 'everybody')}>{tx('Set the default rates')}</button>
-            </div>
-          )}
-
-          {/* "0 UZS" in 40px type is a statement about the team. On a board
-              where nobody has set a rate it is a statement about the setup,
-              and the card above already makes it — so the total waits until
-              there is one. */}
-          {data.hasDefault && (
-            <div className={'card card-pad rp-head' + (allSettled ? ' rp-head-settled' : '')}>
-              <div className="rp-big">
-                <b>{money(allSettled ? data.settledTotal : total, cur)}</b>
-                <span className="rp-big-label">
-                  {allSettled ? tx('paid for {month}', { month: monthWords(month) }) : tx('the whole payroll for the period')}
-                  <br /><span className="stat-sub">{range.from} → {range.to}</span>
-                </span>
-              </div>
-              {/* Closing a month is the one thing on this page that writes
-                  down what actually went out. Everything else re-derives
-                  itself for ever, which is why editing an old task used to
-                  quietly rewrite a payslip somebody had already been paid
-                  against. */}
-              <div className="rp-close">
-                {settled.length > 0 && (
-                  <span className="rp-closed-note">
-                    <CheckCircle2 size={14} />
-                    {allSettled
-                      ? tx('Recorded as paid')
-                      : tx('{n} of {total} recorded as paid', { n: settled.length, total: data.people.length })}
-                  </span>
-                )}
-                {!allSettled && wholeMonth && (
-                  <button className="btn btn-sm btn-primary" disabled={busy || data.people.length === 0}
-                    onClick={() => setClosing({ month, paid_at: todayISO(), note: '' })}>
-                    <Banknote size={14} /> {tx('Record as paid')}
-                  </button>
-                )}
-                {!allSettled && !wholeMonth && (
-                  <span className="stat-sub rp-closed-note rp-note-plain">
-                    {tx('Pick a whole month to record a payment — a payment is recorded against a month.')}
-                  </span>
-                )}
-                {settled.length > 0 && (
-                  <button className="btn btn-sm" onClick={reopenMonth} disabled={busy}>
-                    <Undo2 size={14} /> {tx('Re-open')}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* One row per person, not ten columns.
-              It WAS a table: Member, Delivered, On time, Views, Base,
-              Piecework, Bonus, Late, Pay, and two buttons — every cell with
-              two or three sub-lines under it. Ten columns is past what
-              anybody reads across, which is why it needed a legend card above
-              it explaining that the last column was the other four added up.
-              A table that needs a key is a table nobody can read.
-
-              So the sum is drawn instead of explained: the bar under each
-              name IS base + piecework + bonus, in proportion, and the terms
-              are written under it in the same colours. Nothing to cross-
-              reference, and the legend card is gone with the columns. */}
-          <div className="pay-rows">
-            {data.people.map((p) => {
-              const noRates = p.source === 'none'
-              // What the total is made of, as worked out by whatever decided
-              // it. The old list was base + piecework + bonus, which is one
-              // arrangement out of six: on a pillow card it drew a bar that
-              // did not add up to the number beside it, and on a KPI card it
-              // drew nothing at all.
-              const parts = (p.parts || []).filter((x) => x.amount > 0)
-              return (
-                <div className={'pay-row' + (noRates ? ' pay-row-unset' : '') + (p.payout ? ' pay-row-paid' : '')} key={p.id}>
-                  <div className="pay-row-who">
-                    <Avatar name={p.name} color={p.color} src={p.avatar} size="sm" />
-                    <div>
-                      <b>{p.name}</b>
-                      <span className="stat-sub">
-                        {p.source === 'own' ? tx('own rates')
-                          : p.source === 'role' ? tx('on the {role} card', { role: tx(ROLE_WORD[p.from_role] || p.from_role || '') })
-                            : p.source === 'default' ? tx('default rates') : tx('no rates set')}
-                        {/* Which arrangement they are on. Two people with the
-                            same figure beside their name can have got there
-                            two completely different ways, and the payroll was
-                            not saying which. */}
-                        {!noRates && p.schemeLabel && p.scheme !== 'piece' && <> · {tx(p.schemeLabel)}</>}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="pay-row-sum">
-                    {/* A person nobody has set up shows what is true — that
-                        nobody has set them up. "0 UZS" in the same type as
-                        everybody else's pay reads as a statement about them. */}
-                    {noRates
-                      ? <button className="btn btn-sm" onClick={() => openCard(p.id, p.name)}>{tx('Set their rates')}</button>
-                      : <>
-                          <b>{money(p.payout ? p.payout.total : p.total, p.currency)}</b>
-                          {wholeMonth && !p.payout && (p.goals || []).some((g) => g.state === 'behind') && (
-                            <span className="pay-slip-tag"
-                              data-tip={tx('At this pace the month ends short of a bonus they could still reach')}>
-                              <AlertCircle size={12} /> {tx('slipping')}
-                            </span>
-                          )}
-                          {p.payout && (
-                            <span className="pay-paid-tag" data-tip={p.payout.paid_at ? tx('Paid {day}', { day: dateLabel(p.payout.paid_at) }) : undefined}>
-                              <CheckCircle2 size={12} /> {tx('paid')}
-                            </span>
-                          )}
-                          {parts.length > 0 && (
-                            <>
-                              <span className="pay-bar">
-                                {parts.map((x) => <span key={x.key} className={`pay-bar-${x.key}`} style={{ flexGrow: x.amount }} />)}
-                              </span>
-                              <span className="pay-parts">
-                                {parts.map((x) => (
-                                  <span key={x.key} className={`pay-part pay-part-${x.key}`}>
-                                    <i />{tx(x.label)} {money(x.amount, '')}
-                                  </span>
-                                ))}
-                                {p.penalty > 0 && (
-                                  <span className="pay-part pay-part-late">
-                                    <i />{tx('Late')} −{money(p.penalty, '')}
-                                  </span>
-                                )}
-                              </span>
-                            </>
-                          )}
-                        </>}
-                  </div>
-
-                  {/* The counts that earned it. Nothing that is zero and
-                      nothing nobody set a target for is printed: a board that
-                      pays nothing on views should never mention views. */}
-                  <div className="pay-row-facts">
-                    <span>
-                      <b>{p.delivered}</b>{p.quota > 0 ? ` / ${p.quota}` : ''} {tx('delivered')}
-                      {p.quota > 0 && !p.quotaMet && <em> · {tx('{n} to go', { n: p.quotaLeft })}</em>}
-                    </span>
-                    {p.onTimePct !== null && (
-                      <span className={p.onTimePct >= (p.rates?.ontime_target || 0) ? 'pay-good' : 'pay-bad'}>
-                        <b>{p.onTimePct}%</b> {tx('on time')}
-                      </span>
-                    )}
-                    {(p.views > 0 || p.viewsTarget > 0) && (
-                      <span className={p.viewsTarget > 0 && p.viewsMet ? 'pay-good' : undefined}>
-                        <b>{money(p.views || 0, '')}</b>
-                        {p.viewsTarget > 0 ? ` / ${money(p.viewsTarget, '')}` : ''} {tx('views')}
-                        {p.viewsCounted > 0 && p.viewsCounted < p.delivered && (
-                          <em> · {tx('{counted} of {delivered} counted', { counted: p.viewsCounted, delivered: p.delivered })}</em>
-                        )}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Two different things get paid here and they are set
-                      apart: the RATES are what a piece is worth and change
-                      rarely; the KPI card is this month's grades and is
-                      rewritten in the last five days of every month.
-                      Named in words rather than left to two tooltips that
-                      opened on top of each other. */}
-                  <div className="pay-row-do">
-                    <PayReportButton userId={p.id} name={p.name} label={tx('Every job')} />
-                    <button className="btn btn-sm" onClick={() => setKpiFor({ id: p.id, name: p.name })}>
-                      <Gauge size={14} /> {tx('KPI')}
-                    </button>
-                    <button className="btn btn-sm" onClick={() => openCard(p.id, p.name, p.pay_role)}
-                      data-tip={p.source === 'own' ? tx('A card of their own')
-                        : p.source === 'role' ? tx('Paid on the {role} card', { role: tx(ROLE_WORD[p.from_role] || p.from_role || '') })
-                          : tx('Paid on the default card')}>
-                      <Pencil size={14} /> {tx('Rates')}
-                      {p.source !== 'own' && <span className="pay-from">{p.source === 'role' ? tx(ROLE_WORD[p.from_role] || p.from_role || '') : tx('default')}</span>}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-            {data.people.length === 0 && <div className="card card-pad empty">{tx('No deliveries')}</div>}
-          </div>
-          {kpiFor && (
-            <KpiCard userId={kpiFor.id} name={kpiFor.name} month={range.to.slice(0, 7)}
-              onClose={(saved) => { setKpiFor(null); if (saved) load() }} />
-          )}
-        </>
-      )}
-
-      {/* Recording a month as paid. Deliberately a confirmation rather than a
-          single press: it freezes figures somebody is going to be paid
-          against, and the day it says the money went out is the day that will
-          be on the record for ever. */}
-      {closing && (
-        <Modal
-          title={tx('Record {month} as paid', { month: monthWords(closing.month) })}
-          onClose={() => setClosing(null)}
-          footer={<>
-            <span className="foot-gap" />
-            <button className="btn" onClick={() => setClosing(null)}>{tx('Cancel')}</button>
-            <button className="btn btn-primary" onClick={closeMonth} disabled={busy}>
-              <Banknote size={14} /> {tx('Record as paid')}
-            </button>
-          </>}
-        >
-          {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-          <div className="cm-hint" style={{ marginBottom: 12 }}>
-            {tx('{n} people, {amount} in total. The figures are written down as they stand now and stop being re-worked-out — so editing an old task later cannot change a payslip somebody has already been paid against. Re-opening the month undoes it.', {
-              n: toRecord.length, amount: money(toRecord.reduce((a, p) => a + p.total, 0), cur),
-            })}
-          </div>
-          <label className="field">
-            <span className="label">{tx('The day the money went out')}</span>
-            <input className="input" type="date" style={{ maxWidth: 200 }} value={closing.paid_at}
-              onChange={(e) => setClosing({ ...closing, paid_at: e.target.value })} />
-          </label>
-          <label className="field">
-            <span className="label">{tx('Note')} <span className="stat-sub">{tx('optional')}</span></span>
-            <input className="input" value={closing.note} placeholder={tx('e.g. paid by transfer, 2 people in cash')}
-              onChange={(e) => setClosing({ ...closing, note: e.target.value })} />
-          </label>
-          {!monthOver && (
-            <div className="cm-hint">
-              <AlertCircle size={13} style={{ verticalAlign: -2 }} />{' '}
-              {tx('{month} has not finished yet — anything delivered after today will not be in these figures.', { month: monthWords(closing.month) })}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {card && (
-        <Modal
-          title={card.userId === 'default' ? 'Default rates' : `${card.name}'s rates`}
-          onClose={() => setCard(null)}
-          footer={<>
-            {card.userId !== 'default' && card.own && (
-              <button className="btn" onClick={dropCard} disabled={busy}><RotateCcw size={14} /> {tx('Use the default')}</button>
-            )}
-            <span className="foot-gap" />
-            <button className="btn" onClick={() => setCard(null)}>{tx('Cancel')}</button>
-            <button className="btn btn-primary" onClick={saveCard} disabled={busy}>{tx('Save rates')}</button>
-          </>}
-        >
-          {err && <div className="form-error"><AlertCircle size={16} /> {err}</div>}
-          {/* Three layers, and the card says which one it is looking at: a
-              personal card beats a role card, and a role card beats the
-              default. Somebody editing a card that is not the person's own is
-              about to create one, and should know it before they save. */}
-          <div className="cm-hint" style={{ marginBottom: 12 }}>
-            {card.userId === 'default'
-              ? tx('What everybody is paid on unless their role has a card, or they have one of their own. Leave a line at zero and it simply does not count.')
-              : String(card.userId).startsWith('role:')
-                ? tx('Every {role} is paid on this unless they have a card of their own.', { role: card.name })
-                : card.own
-                  ? tx('{name} is paid on these rates rather than on their role’s card.', { name: card.name })
-                  : card.from === 'role'
-                    ? tx('{name} is paid on the {role} card. Change anything here and they get a card of their own, which stops following it.', { name: card.name, role: tx(ROLE_WORD[card.role] || card.role || '') })
-                    : tx('{name} is on the default rates. Change anything here and they get a card of their own.', { name: card.name })}
-          </div>
-          <div className="field"><label>{tx('Currency')}</label>
-            <input className="input" style={{ maxWidth: 120 }} value={card.form.currency || ''}
-              onChange={(e) => setCard({ ...card, form: { ...card.form, currency: e.target.value } })} />
-          </div>
-
-          {/* HOW this person is paid, before a single rate. It decides which
-              of the rows below are paid on at all, so asking it after them
-              would be eleven questions in front of the one that says whether
-              they matter. */}
-          <div className="field"><label>{tx('How they are paid')}</label>
-            <select className="select" value={card.form.scheme || 'piece'}
-              onChange={(e) => setCard({ ...card, form: { ...card.form, scheme: e.target.value } })}>
-              {Object.entries(schemes).map(([k, v]) => (
-                <option key={k} value={k}>{tx(v.label)}</option>
-              ))}
-            </select>
-            <div className="cm-hint">{tx(schemes[card.form.scheme || 'piece']?.hint || '')}</div>
-          </div>
-
-          {/* The safety pillow. Drawn only where one stands, and it says what
-              it does in the two directions people actually ask about. */}
-          {shows.pillow && (
-            <div className="field"><label>{tx('Safety pillow')}</label>
-              <input className="input" type="number" min="0" step="100000" style={{ maxWidth: 220 }}
-                value={card.form.pillow ?? 0}
-                onChange={(e) => setCard({ ...card, form: { ...card.form, pillow: e.target.value } })} />
-              <div className="cm-hint">
-                {Number(card.form.pillow) > 0
-                  ? tx('A month that comes to less than {amount} is topped up to it — a month the company could not fill is still paid in full. A month that runs past it is paid for what was actually done; the pillow is a floor, never a bonus on top.', { amount: money(Number(card.form.pillow), card.form.currency || 'UZS') })
-                  : tx('Nothing guaranteed. Set an amount and the month can never come to less than it.')}
-              </div>
-            </div>
-          )}
-
-          {/* Eleven rates typed from scratch, per person, is how a pay scheme
-              never gets set up at all. Nobody thinks in rates; everybody
-              thinks in "an editor's month is worth about four million". */}
-          {!shows.rates ? null : !plan ? (
-            <button type="button" className="btn btn-sm" style={{ marginBottom: 14 }}
-              onClick={() => setPlan({ job: JOBS[0].key, monthly: JOBS[0].monthly, quota: JOBS[0].quota })}>
-              <Wallet size={14} /> Work it out from a monthly figure
-            </button>
-          ) : (
-            <div className="card card-pad pay-plan">
-              <div className="cm-hint">
-                Say what a full month of this job is worth and roughly how many pieces that is.
-                It splits into {Math.round(SHAPE.base * 100)}% base, {Math.round(SHAPE.piece * 100)}% paid per piece,
-                {' '}{Math.round(SHAPE.quota * 100)}% for reaching the quota and {Math.round(SHAPE.ontime * 100)}% for
-                being on time — a starting shape, not a rule. Nothing is saved until you press Save, and every
-                line below stays yours to argue with.
-              </div>
-              <div className="pay-plan-row">
-                <label>
-                  <span>{tx('Job')}</span>
-                  <select className="select" value={plan.job}
-                    onChange={(e) => {
-                      const j = JOBS.find((x) => x.key === e.target.value)
-                      setPlan({ job: j.key, monthly: j.monthly, quota: j.quota })
-                    }}>
-                    {JOBS.map((j) => <option key={j.key} value={j.key}>{j.label}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>{tx('A full month is worth')}</span>
-                  <input className="input" type="number" min="0" step="100000" value={plan.monthly}
-                    onChange={(e) => setPlan({ ...plan, monthly: e.target.value })} />
-                </label>
-                <label>
-                  <span>{tx('…and is about')}</span>
-                  <input className="input" type="number" min="1" step="1" value={plan.quota}
-                    onChange={(e) => setPlan({ ...plan, quota: e.target.value })} />
-                </label>
-              </div>
-              <div className="pay-plan-do">
-                <button type="button" className="btn btn-sm" onClick={() => setPlan(null)}>{tx('Never mind')}</button>
-                <button type="button" className="btn btn-sm btn-primary"
-                  onClick={() => {
-                    const j = JOBS.find((x) => x.key === plan.job)
-                    setCard({ ...card, form: workOutCard(j, plan.monthly, plan.quota, card.form.currency || 'UZS') })
-                    setPlan(null)
-                  }}>
-                  <Check size={14} /> Fill the rates in
-                </button>
-              </div>
-            </div>
-          )}
-          {/* ---- what a piece is worth, by what kind of piece it is ----
-              The maker's side of the card. Over the view target the thousands
-              are the WHOLE payment for that piece; under it, the flat rate and
-              nothing else. A kind left blank is paid exactly as it was before
-              any of this existed. */}
-          {shows.rates && (
-            <div className="pay-kinds">
-              <div className="pay-kinds-head">
-                <b>{tx('What a piece is worth, by what it is')}</b>
-                <span className="stat-sub">
-                  {tx('Past the view target a piece is paid by the thousand instead of the flat rate — not as well as it. Leave a kind empty and it is paid by the rates above.')}
-                </span>
-              </div>
-              <table className="tbl pay-kinds-tbl">
-                <thead><tr>
-                  <th>{tx('Kind')}</th><th>{tx('Flat')}</th><th>{tx('View target')}</th><th>{tx('Per 1,000 past it')}</th>
-                </tr></thead>
-                <tbody>
-                  {KIND_ROWS.map((k) => {
-                    const rule = card.form.kind_rules?.[k.key] || {}
-                    const setRule = (field, value) => setCard({
-                      ...card,
-                      form: {
-                        ...card.form,
-                        kind_rules: { ...(card.form.kind_rules || {}), [k.key]: { ...rule, [field]: value } },
-                      },
-                    })
-                    return (
-                      <tr key={k.key}>
-                        <td><b>{tx(k.label)}</b></td>
-                        {['flat', 'gate', 'per_1k'].map((f) => (
-                          <td key={f}>
-                            <input className="input" type="number" min="0" step={f === 'gate' ? 1000 : 1000}
-                              value={rule[f] ?? ''} placeholder="0"
-                              onChange={(e) => setRule(f, e.target.value)} />
-                          </td>
-                        ))}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* The rates, with the lines this role is never paid on folded out of
-              the way — and a switch that brings every one of them back. */}
-          {shows.rates && (
-            <>
-              <div className="pay-rows-head">
-                <b>{tx('The rates')}</b>
-                <label className="pay-showall">
-                  <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-                  {tx('Show every line')}
-                </label>
-              </div>
-              {RATE_ROWS
-                .filter((r) => showAll || !r.roles || !card.role || r.roles.includes(card.role)
-                  || Number(card.form[r.key]) > 0)
-                .map((r) => (
-                  <div className="field" key={r.key}>
-                    <label>{tx(r.label)} {r.hint ? <span style={{ color: 'var(--muted)', fontWeight: 400 }}>— {tx(r.hint)}</span> : null}</label>
-                    <input className="input" type="number" min="0" style={{ maxWidth: 220 }}
-                      step={r.pct || r.plain ? 1 : 1000} max={r.pct ? 100 : undefined}
-                      value={card.form[r.key] ?? 0}
-                      onChange={(e) => setCard({ ...card, form: { ...card.form, [r.key]: e.target.value } })} />
-                  </div>
-                ))}
-            </>
-          )}
-        </Modal>
-      )}
-    </>
-  )
-}
 
 /* ==================== LANGUAGE HELP ==================== */
 /* Who translates the briefs, and whether it costs anything.
@@ -2215,20 +1289,18 @@ const TASK_FIELD_DEFS = [
 // My Day and the channel boards are not here on purpose: they are the work
 // itself, and a board with no way into the work is not a tidier board.
 const PAGE_DEFS = [
-  { key: 'overview', label: 'Overview', hint: 'every channel’s process on one screen' },
   // Named the way every door to it is named now. The key stays 'releases',
   // which is what the stored switches and audiences are filed under; only
   // the words changed, so an admin looking for the Master Calendar here finds
   // it rather than a page called something the sidebar no longer says.
   { key: 'releases', label: 'Master Calendar', hint: 'everything going out, every channel' },
   { key: 'recordings', label: 'Recordings', hint: 'what is being filmed, every channel' },
-  { key: 'missed', label: 'Statistics', hint: 'the month, its conclusions and the misses behind them' },
+  { key: 'missed', label: 'Numbers', hint: 'the month, who is late, and the pay — one page with three tabs' },
   { key: 'design', label: 'Design', hint: 'the designer’s own board' },
-  { key: 'docs', label: 'Documents', hint: 'the shelf of SOPs and papers' },
-  { key: 'sprints', label: 'Sprints', hint: 'the weekly board and its backlog' },
+  { key: 'docs', label: 'My pay', hint: 'what the month is worth to each person, with the KPI document, under their profile' },
+  { key: 'sprints', label: 'Sprints (retiring)', hint: 'in no menu since 20 October; the page and its backlog stay by their address until 3 November' },
   { key: 'projects', label: 'Projects', hint: 'projects and the campaigns under them' },
-  { key: 'crew', label: 'Crew', hint: 'the editors’ and designers’ desk' },
-  { key: 'team', label: 'Team & hiring', hint: 'the team, candidates and vacancies' },
+  { key: 'team', label: 'Team', hint: 'the people, their workload and their access — one page with three tabs' },
 ]
 
 // Who a page can be aimed at. The same four words the role picker uses when a
@@ -2305,7 +1377,10 @@ function NoticeEditor({ notice, onSaved }) {
   )
 }
 
-function SettingsTab() {
+function SettingsTab({ only = null }) {
+  // Which of its sections to draw: the Board group takes the notice and the
+  // reminders first and the task form last, the Team group the pages (N-04).
+  const show = (k) => !only || only.includes(k)
   const [fields, setFields] = useState(null)
   const [optDraft, setOptDraft] = useState({})
   const load = () => api.get('/fields').then(setFields).catch(() => {})
@@ -2368,21 +1443,31 @@ function SettingsTab() {
   return (
     <>
       {/* ---- the one notice the board may put above everybody's work ---- */}
-      <div className="section-head">
-        <h2>{tx('Planned update')}</h2>
-        <span className="count">· {tx('a heads-up the whole team sees until they dismiss it')}</span>
-      </div>
-      <div className="card">
-        <NoticeEditor notice={fields.notice} onSaved={(eff) => setFields((prev) => ({ ...prev, ...eff }))} />
-      </div>
+      {show('notice') && (
+        <>
+          <div className="section-head">
+            <h2>{tx('Planned update')}</h2>
+            <span className="count">· {tx('a heads-up the whole team sees until they dismiss it')}</span>
+          </div>
+          <div className="card">
+            <NoticeEditor notice={fields.notice} onSaved={(eff) => setFields((prev) => ({ ...prev, ...eff }))} />
+          </div>
+        </>
+      )}
 
       {/* ---- r11: the editors' reminders and the Monday clearing of the overdue ---- */}
-      <div className="section-head">
-        <h2>{tx('Reminders and clearing')}</h2>
-      </div>
-      <div className="card card-pad"><HousekeepingSettings /></div>
+      {show('reminders') && (
+        <>
+          <div className="section-head" style={{ marginTop: 18 }}>
+            <h2>{tx('Reminders and clearing')}</h2>
+          </div>
+          <div className="card card-pad"><HousekeepingSettings /></div>
+        </>
+      )}
 
       {/* ---- the pages this board shows ---- */}
+      {show('pages') && (
+        <>
       <div className="section-head">
         <h2>{tx('Pages')}</h2>
         <span className="count">· {tx('which of them the team has at all')}</span>
@@ -2439,11 +1524,13 @@ function SettingsTab() {
           {tx('Aiming a page works the same way — it decides whose sidebar carries the door, not who the board will answer. Tick nobody and the page is everyone’s; admins always keep every page.')}
         </div>
       </div>
+        </>
+      )}
 
       {/* ---- the task form: which brief fields exist, and which are demanded ---- */}
-      {fields && (
+      {fields && show('taskform') && (
         <>
-          <div className="section-head" style={{ marginTop: 18 }}>
+          <div className="section-head">
             <h2>{tx('The task form')}</h2>
             <span className="count">{tx('· which brief fields a task carries — and which are demanded')}</span>
           </div>
@@ -2611,28 +1698,6 @@ function SettingsTab() {
 // grade ladder are the same shape, so they are the same editor. Rows are
 // added and removed here and saved together: a ladder with a rung missing
 // while somebody types the next one is not a state worth storing.
-// Paying happens outside this system. This records that somebody said it was
-// done, and who — the same shape as the sprint board recording who dropped a
-// task rather than pretending the system did it.
-function MonthPaid({ month, sheet, onDone }) {
-  const [busy, setBusy] = useState(false)
-  if (!month) return null
-  const unpaid = sheet.filter((r) => !r.paid).length
-  const go = async (path) => {
-    setBusy(true)
-    try { const r = await api.post(`/reports/work/${path}`, { month }); toast(tx('Saved — synced')); onDone(r) }
-    catch (e) { alert(e.message) } finally { setBusy(false) }
-  }
-  return unpaid > 0 ? (
-    <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => go('paid')}>
-      {tx('Mark {month} paid', { month })}
-    </button>
-  ) : (
-    <button className="btn btn-sm" disabled={busy} onClick={() => go('unpaid')}>
-      {tx('Re-open {month}', { month })}
-    </button>
-  )
-}
 
 function LadderEditor({ title, note, rows, cols, blank, onSave }) {
   const [draft, setDraft] = useState(rows)
@@ -2910,428 +1975,6 @@ function PipelineTab() {
             </div>
           </div>
         </Modal>
-      )}
-    </>
-  )
-}
-
-/* ==================== REPORTS ==================== */
-// The five ways a person can have had a hand in a piece. Each is counted on
-// the day THEIR part was delivered, not on the day the piece went out.
-const HATS = [
-  { key: 'assignee', label: 'Ran it', icon: UserCheck, noun: 'piece', verb: 'published', tip: 'Whose piece it was — the planner who saw it out' },
-  { key: 'operator', label: 'Shot it', icon: Video, noun: 'shoot', verb: 'delivered', tip: 'Counted on the day the footage reached the editor' },
-  { key: 'editor', label: 'Edited it', icon: Scissors, noun: 'edit', verb: 'delivered', tip: 'Counted on the day the edit reached review' },
-  { key: 'designer', label: 'Designed it', icon: Palette, noun: 'piece', verb: 'designed', tip: 'Artwork has no handover of its own, so it counts when the piece goes out' },
-  { key: 'reviewer', label: 'Signed it off', icon: CheckSquare, noun: 'sign-off', verb: 'given', tip: 'Review is shared — every name on it is counted' },
-]
-
-function ReportsTab({ channel, setChannel }) {
-  const { channels, byKey } = useChannels()
-  const t = todayISO()
-  const monthStart = t.slice(0, 8) + '01'
-  const prevMonthEnd = addDaysISO(monthStart, -1)
-  const prevMonthStart = prevMonthEnd.slice(0, 8) + '01'
-  const weekStart = (() => {
-    const d = new Date(`${t}T00:00:00`) // weekday of today's Tashkent date
-    return addDaysISO(t, -((d.getDay() + 6) % 7))
-  })()
-
-  const PRESETS = [
-    { key: 'week', label: 'This week', from: weekStart, to: t },
-    { key: 'month', label: tx('This month'), from: monthStart, to: t },
-    { key: 'prev', label: tx('Last month'), from: prevMonthStart, to: prevMonthEnd },
-    { key: 'custom', label: 'Custom' },
-  ]
-  const [preset, setPreset] = useState('month')
-  const [from, setFrom] = useState(monthStart)
-  const [to, setTo] = useState(t)
-  const [hat, setHat] = useState('assignee')
-  const [type, setType] = useState('')
-  const [data, setData] = useState(null)
-
-  const range = useMemo(() => {
-    const p = PRESETS.find((x) => x.key === preset)
-    return preset === 'custom' ? { from, to } : { from: p.from, to: p.to }
-  }, [preset, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    setData(null)
-    api.get(`/reports?from=${range.from}&to=${range.to}&hat=${hat}${type ? `&type=${type}` : ''}`)
-      .then(setData).catch(() => setData(null))
-  }, [range.from, range.to, hat, type])
-
-  // What it all got watched — the same window and the same channel lens, so
-  // the two blocks on this page can never be talking about different months.
-  const [views, setViews] = useState(null)
-  useEffect(() => {
-    setViews(null)
-    api.get(`/reports/views?from=${range.from}&to=${range.to}&channel=${channel}`)
-      .then(setViews).catch(() => setViews(null))
-  }, [range.from, range.to, channel])
-
-  // What each person actually MADE — filmed, edited, and both — and the
-  // register those counts came from. Same window, same channel lens.
-  const [work, setWork] = useState(null)
-  const loadWork = useCallback(() => {
-    api.get(`/reports/work?from=${range.from}&to=${range.to}&channel=${channel}`)
-      .then(setWork).catch(() => setWork(null))
-  }, [range.from, range.to, channel])
-  useEffect(() => { setWork(null); loadWork() }, [loadWork])
-
-  const colorOf = useMemo(() => Object.fromEntries(channels.map((c, i) => [c.key, deptColor(i)])), [channels])
-  const chStats = channel !== 'all' ? data?.byChannel?.[channel] : null
-  const shownTotal = channel === 'all' ? data?.totalDone : (chStats?.total || 0)
-
-  // People, through the selected channel's lens — the same numbers as the
-  // channel breakdown, never a second calculation.
-  const people = useMemo(() => {
-    if (!data) return []
-    if (channel === 'all') return data.report
-    return data.report
-      .map((r) => ({ ...r, shown: r.byChannel[channel] || 0, items: r.items.filter((it) => (it.channels || [it.channel]).includes(channel)) }))
-      .filter((r) => r.shown > 0 || r.role !== 'admin')
-      .sort((a, b) => (b.shown || 0) - (a.shown || 0))
-  }, [data, channel])
-
-  return (
-    <>
-      <div className="section-head">
-        <h2>{tx('Who did what')}</h2>
-        <span className="count">{tx('· completed work, one source of truth')}</span>
-        <span className="spacer" />
-        <div className="pill-group">
-          {PRESETS.map((p) => (
-            <button key={p.key} className={'pill' + (preset === p.key ? ' active' : '')} onClick={() => setPreset(p.key)}>{p.label}</button>
-          ))}
-        </div>
-      </div>
-      {preset === 'custom' && (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-          <input className="input" type="date" style={{ width: 160 }} value={from} onChange={(e) => setFrom(e.target.value)} />
-          <input className="input" type="date" style={{ width: 160 }} value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-      )}
-
-      {/* Channel lens: All, or one channel in its own color */}
-      <div className="pill-group" style={{ margin: '4px 0 14px' }}>
-        <button className={'pill' + (channel === 'all' ? ' active' : '')} onClick={() => setChannel('all')} data-tip={tx('All channels together')}>{tx('All channels')}</button>
-        {channels.map((c) => (
-          <button key={c.key} className={'pill' + (channel === c.key ? ' active' : '')} onClick={() => setChannel(c.key)}
-            data-tip={`Only ${c.label}'s completed work`}>
-            <span className="rp-dot" style={{ background: colorOf[c.key] }} />{c.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ---- what each person actually made ---- */}
-      {/* The delivery report answers "was it on time". This answers "what did
-          you make" — which for an operator or an editor is the whole question,
-          and the board had no way to say it. */}
-      {work && (
-        <>
-          <div className="section-head" style={{ marginTop: 4 }}>
-            <h2>{tx('What everyone made')}</h2>
-            <span className="count">· {tx('filmed, edited, and both')}</span>
-          </div>
-          <div className="card table-wrap">
-            <table className="tbl work-tbl">
-              <thead>
-                <tr>
-                  <th>{tx('Name')}</th>
-                  <th data-tip={tx('Pieces they filmed and somebody else edited')}>{tx('Filmed')}</th>
-                  <th data-tip={tx('Pieces they edited and somebody else filmed')}>{tx('Edited')}</th>
-                  <th data-tip={tx('Pieces they both filmed and edited — one whole piece carried alone')}>{tx('Both')}</th>
-                  <th data-tip={tx('Pieces their face carries')}>{tx('In front')}</th>
-                  <th data-tip={tx('Where their delivered count puts them on the ladder')}>{tx('Grade')}</th>
-                  <th data-tip={tx('What the tiers pay for what they filmed and edited')}>{tx('Tier pay')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {work.people.map((p) => (
-                  <tr key={p.user_id}>
-                    <td><b>{p.name}</b></td>
-                    <td>{p.filmed || <span className="stat-sub">—</span>}</td>
-                    <td>{p.edited || <span className="stat-sub">—</span>}</td>
-                    <td>{p.both || <span className="stat-sub">—</span>}</td>
-                    <td>{p.faced || <span className="stat-sub">—</span>}</td>
-                    <td>
-                      {p.grade
-                        ? <b>{p.grade}</b>
-                        : <span className="stat-sub">—</span>}
-                      {p.next && (
-                        <span className="stat-sub"> · {tx('{name} at {n}', { name: p.next, n: p.next_at })}</span>
-                      )}
-                    </td>
-                    <td>{p.tier_pay ? money(p.tier_pay, '') : <span className="stat-sub">—</span>}</td>
-                  </tr>
-                ))}
-                {work.people.length === 0 && (
-                  <tr><td colSpan={7} className="empty">{tx('Nothing sent')}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* The register the counts came from. Anybody can check the total
-              rather than take it. */}
-          <Fold id="admin_work_sheet" title={tx('Every piece, one by one')} count={work.sheet.length}>
-            <div className="card table-wrap">
-              <table className="tbl work-sheet">
-                <thead>
-                  <tr>
-                    <th>#</th><th>{tx('Title')}</th><th>{tx('Filmed')}</th><th>{tx('Edited')}</th>
-                    <th>{tx('In front')}</th><th>{tx('Views')}</th><th>{tx('Skip')}</th>
-                    <th>{tx('Where it went')}</th><th>{tx('Paid')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {work.sheet.map((r) => (
-                    <tr key={r.id}>
-                      <td className="stat-sub">{r.n}</td>
-                      <td><b>{r.title}</b><div className="stat-sub">{r.day}</div></td>
-                      <td>{r.filmed_by || <span className="stat-sub">—</span>}</td>
-                      <td>{r.edited_by || <span className="stat-sub">—</span>}</td>
-                      <td>{r.face || <span className="stat-sub">—</span>}</td>
-                      <td>{r.views == null ? <span className="stat-sub">{tx('not counted')}</span> : r.views.toLocaleString()}</td>
-                      <td>
-                        {r.skip_rate == null
-                          ? <span className="stat-sub">{tx('not measured')}</span>
-                          : <>{r.skip_rate}%{r.tier && <b className="chip chip-muted"> {r.tier}</b>}</>}
-                      </td>
-                      <td>
-                        {r.post_link
-                          ? <a href={r.post_link} target="_blank" rel="noreferrer">{tx('Open it')}</a>
-                          : <span className="stat-sub">—</span>}
-                      </td>
-                      <td>{r.paid ? <b className="paid-yes">{tx('Paid')}</b> : <span className="stat-sub">{tx('Not yet')}</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="ladder-foot">
-                <span className="stat-sub">
-                  {tx('{n} of {m} paid', { n: work.sheet.filter((r) => r.paid).length, m: work.sheet.length })}
-                </span>
-                <span className="spacer" />
-                <MonthPaid month={work.sheet[0]?.day?.slice(0, 7) || ''} sheet={work.sheet} onDone={loadWork} />
-              </div>
-            </div>
-          </Fold>
-        </>
-      )}
-
-      {/* ---- what it all got watched ---- */}
-      {/* The delivery report says how much went out. It said nothing at all
-          about whether anybody watched it, which is a strange thing for a
-          marketing board to be quiet about. Same window, same channel lens. */}
-      {views && (
-        <>
-          <div className="section-head" style={{ marginTop: 4 }}>
-            <h2>{tx('Views')}</h2>
-            <span className="count">· {tx('what the work actually got')}</span>
-          </div>
-          <div className="card card-pad vw-card">
-            <div className="vw-tiles">
-              <div className="vw-tile">
-                <b>{views.totals.views.toLocaleString()}</b>
-                <span>{tx('views in this period')}</span>
-              </div>
-              <div className="vw-tile">
-                <b>{views.totals.avg === null ? '—' : views.totals.avg.toLocaleString()}</b>
-                <span>{tx('average per counted piece')}</span>
-              </div>
-              <div className="vw-tile">
-                <b>{views.totals.counted}<span className="stat-sub"> / {views.totals.pieces}</span></b>
-                <span>{tx('pieces with a number on them')}</span>
-              </div>
-            </div>
-            {/* A total drawn from a third of the month reads as if it were the
-                whole month unless it says so. */}
-            {views.uncounted > 0 && (
-              <div className="vw-warn">
-                <AlertCircle size={14} />
-                {views.uncounted === 1
-                  ? tx('One piece went out with nobody counting its views — this total is what has been counted, not what the month got.')
-                  : `${views.uncounted} ${tx('pieces went out with nobody counting their views — this total is what has been counted, not what the month got.')}`}
-              </div>
-            )}
-            {views.totals.pieces === 0 && (
-              <div className="stat-sub">{tx('Nothing went out in this period.')}</div>
-            )}
-
-            {views.byType.length > 0 && (
-              <div className="vw-split">
-                <div className="vw-col">
-                  <h3>{tx('By type')}</h3>
-                  {views.byType.map((r) => (
-                    <div key={r.key} className="vw-row">
-                      <span className={`chip ct-${r.key}`}>{typeInfo(r.key).label}</span>
-                      <span className="vw-bar">
-                        <span style={{ width: `${views.byType[0].views > 0 ? Math.round((r.views / views.byType[0].views) * 100) : 0}%` }} />
-                      </span>
-                      <b>{r.views.toLocaleString()}</b>
-                      <span className="stat-sub">{r.counted}/{r.pieces}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="vw-col">
-                  <h3>{tx('By channel')}</h3>
-                  {views.byChannel.map((r) => (
-                    <div key={r.key} className="vw-row">
-                      <span className="vw-name">
-                        <span className="rp-dot" style={{ background: colorOf[r.key] }} />{r.label}
-                      </span>
-                      <span className="vw-bar">
-                        <span style={{ width: `${views.byChannel[0].views > 0 ? Math.round((r.views / views.byChannel[0].views) * 100) : 0}%` }} />
-                      </span>
-                      <b>{r.views.toLocaleString()}</b>
-                      <span className="stat-sub">{r.counted}/{r.pieces}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {views.byPerson.length > 0 && (
-              <div className="vw-col" style={{ marginTop: 14 }}>
-                <h3>{tx('By content maker')}</h3>
-                {views.byPerson.map((r) => (
-                  <div key={r.id} className="vw-row">
-                    <span className="vw-name">{r.name || `#${r.id}`}</span>
-                    <span className="vw-bar">
-                      <span style={{ width: `${views.byPerson[0].views > 0 ? Math.round((r.views / views.byPerson[0].views) * 100) : 0}%` }} />
-                    </span>
-                    <b>{r.views.toLocaleString()}</b>
-                    <span className="stat-sub">{r.counted}/{r.pieces}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {views.top.length > 0 && (
-              <div className="vw-col" style={{ marginTop: 14 }}>
-                <h3>{tx('What worked best')}</h3>
-                {views.top.slice(0, 8).map((r) => (
-                  <div key={r.id} className="vw-row">
-                    <span className="vw-name vw-title">{r.title}</span>
-                    <span className={`chip ct-${r.type}`}>{typeInfo(r.type).label}</span>
-                    <b>{r.views.toLocaleString()}</b>
-                    <span className="stat-sub">{dateLabel(r.day)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Whose work. The report counted only the ASSIGNEE — the planner —
-          which made the crew invisible: an editor who cut forty videos in a
-          month showed as nothing, because somebody else's name was on the
-          assignee line. Each hat is now counted on the day THAT person's work
-          left their hands. */}
-      <div className="rp-filters">
-        <div className="pill-group">
-          {HATS.map((h) => (
-            <button key={h.key} className={'pill' + (hat === h.key ? ' active' : '')}
-              onClick={() => setHat(h.key)} data-tip={h.tip}>
-              <h.icon size={13} /> {h.label}
-            </button>
-          ))}
-        </div>
-        <select className="select rp-type" value={type} onChange={(e) => setType(e.target.value)}
-          data-tip={tx('Only one kind of piece')}>
-          <option value="">{tx('Every type')}</option>
-          {CONTENT_TYPES.map((c) => <option key={c.key} value={c.key}>{typeInfo(c.key).plan || c.label}</option>)}
-        </select>
-      </div>
-
-      {!data ? (
-        <div className="app-loading"><span className="spinner" /></div>
-      ) : (
-        <>
-          {/* The headline: one big number and where it happened */}
-          <div className="card card-pad rp-head">
-            <div className="rp-big">
-              <b>{shownTotal}</b>
-              <span className="rp-big-label">
-                {HATS.find((h) => h.key === hat)?.noun || 'task'}{shownTotal === 1 ? '' : 's'} {HATS.find((h) => h.key === hat)?.verb || 'completed'}
-                {channel !== 'all' ? <> on <b style={{ color: colorOf[channel] }}>{byKey[channel]?.label || channel}</b></> : ''}
-                <br /><span className="stat-sub">{range.from} → {range.to}</span>
-              </span>
-            </div>
-            <div className="rp-chips">
-              {channel === 'all'
-                ? channels.map((c) => {
-                    const n = data.byChannel?.[c.key]?.total || 0
-                    if (n === 0) return null
-                    return (
-                      <button key={c.key} className="chip rp-chan" style={{ background: colorOf[c.key], color: onColor(colorOf[c.key]) }}
-                        onClick={() => setChannel(c.key)} data-tip={`Open ${c.label}'s report`}>
-                        {c.label} · {n}
-                      </button>
-                    )
-                  })
-                : Object.entries(chStats?.byType || {}).map(([k, n]) => (
-                    <span key={k} className={`chip ct-${k}`}>{typeInfo(k).plan || typeInfo(k).label} · {n}</span>
-                  ))}
-            </div>
-          </div>
-
-          {/* People — big bold numbers, biggest first */}
-          <div className="grid" style={{ gap: 12, marginTop: 14 }}>
-            {people.map((r) => {
-              const n = channel === 'all' ? r.total : r.shown
-              return (
-                <div className="card card-pad rp-person" key={r.id}>
-                  <div className="rp-person-row">
-                    <Avatar name={r.name} color={r.color} src={r.avatar} />
-                    <div className="rp-person-meta">
-                      <div className="rp-person-name">{r.name}</div>
-                      <div className="dept-chips">
-                        {channel === 'all' && Object.entries(r.byChannel).map(([k, cnt]) => (
-                          <span key={k} className="chip" style={{ background: colorOf[k] || '#6d6a70', color: onColor(colorOf[k] || '#6d6a70') }}>
-                            {byKey[k]?.label || k} · {cnt}
-                          </span>
-                        ))}
-                        {Object.entries(r.byType).map(([k, cnt]) => (
-                          <span key={k} className={`chip ct-${k}`}>{typeInfo(k).plan || typeInfo(k).label} · {cnt}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rp-person-total">
-                      <b>{n}</b>
-                      <span>{tx('done')}</span>
-                      {r.late > 0 && (
-                        <span className="rp-late" data-tip={tx('Delivered after the day they promised. A piece that arrived to them late is not counted against them.')}>
-                          {r.late} late
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {r.items.length > 0 && (
-                    <details style={{ marginTop: 10 }}>
-                      <summary className="stat-sub" style={{ cursor: 'pointer' }}>Show the {r.items.length} item{r.items.length === 1 ? '' : 's'}</summary>
-                      <div style={{ marginTop: 6 }}>
-                        {r.items.map((it) => (
-                          <div key={it.id} className="report-item">
-                            <span>{it.title}</span>
-                            <span className="stat-sub">
-                              {byKey[it.channel]?.label || it.channel} · {it.day || (it.done_at ? tashkentDay(it.done_at) : '')}
-                              {it.late && <Dot tone="late" label={tx('late')} />}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              )
-            })}
-            {people.length === 0 && <div className="card card-pad empty">{tx('Nothing completed in this period.')}</div>}
-          </div>
-        </>
       )}
     </>
   )

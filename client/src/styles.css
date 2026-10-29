@@ -2735,7 +2735,12 @@ span.tt-off { position: absolute; left: 0; right: 0; background: var(--surface-2
 .cc-headrow { margin-top: 0; }
 .cc-head { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; }
 .cc-day { min-height: 84px; border: 1px solid var(--hairline); border-radius: 10px; padding: 4px; background: var(--surface); display: flex; flex-direction: column; gap: 3px; }
-.cc-other { opacity: 0.45; }
+/* A day of the month beside this one: a quieter ground, and its number in
+   the muted token. Nothing in it is dimmed: the Mine view is walked by axe
+   (N-01), and an opacity over the cell — or over its pieces — took the words
+   under 4.5:1. A piece is a piece whichever month's square it is in. */
+.cc-other { background: var(--surface-2); }
+.cc-other .cc-num { color: var(--muted); font-weight: 600; }
 .cc-today { border-color: var(--brand-400); box-shadow: inset 0 0 0 1px var(--brand-400); }
 .cc-num { font-size: 11.5px; font-weight: 700; color: var(--ink-2); padding: 0 2px; }
 .cc-ev { border: none; border-left: 3px solid; border-radius: 7px; padding: 4px 6px; text-align: left; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; gap: 1px; }
@@ -3265,6 +3270,11 @@ button.cb-toggle:hover { color: var(--ink); }
 .notif-row:hover { background: var(--surface-2); }
 .notif-row.seen { opacity: 0.55; }
 .notif-ico { flex-shrink: 0; margin-top: 1px; color: var(--brand-500); }
+/* "What changed" as the bell's first item (D-06). */
+.notif-news { display: grid; gap: 8px; margin: 0 2px 8px; padding: 12px 12px 10px; border-radius: 10px; background: var(--soft); font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+.notif-news b { font-size: 13px; font-weight: 600; }
+.notif-news ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; color: var(--ink-2); }
+.notif-news .btn { justify-self: start; }
 .notif-ico.notif-rem { color: var(--warn-ink, #BA7517); }
 @media (max-width: 720px) { .notif-panel { position: fixed; top: 54px; right: 8px; left: 8px; width: auto; } }
 
@@ -9550,6 +9560,24 @@ html[data-look="coach"] .co-btn:is(:disabled, [aria-disabled="true"], .asleep) {
    between the headline and the card ("the day as a line"); round 11 took it
    out — a shoot is a row with its hour. Everything here is a token. */
 .co-head { margin: 4px 0 20px; }
+/* Sprints is retiring (B-08): one quiet line above its two pages, and the
+   kept backlog as a card at the top of Settings → Records. */
+.sp-retiring { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius); background: var(--surface-2); color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; }
+.sp-retiring svg { flex: none; margin-top: 2px; color: var(--ruby); }
+.sp-retiring a { color: var(--ink); font-weight: 600; }
+.adm-backlog { margin-bottom: 16px; }
+/* Numbers (N-02): one month, one channel and one person above every tab. */
+.nb-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: -6px 0 18px; }
+.nb-controls .select { flex: 0 1 auto; width: auto; min-width: 150px; max-width: 260px; margin: 0; }
+.nb-month { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; }
+.nb-month b { min-width: 140px; text-align: center; }
+.nb-sofar { margin: -8px 0 14px; }
+.nb .co-stats { padding: 0; }
+.profile-pay { display: grid; gap: 14px; }
+/* Settings (N-04): a group is one page of its sections, a rule between them. */
+.adm-sec + .adm-sec { margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--hairline); }
+.adm-sec > .section-head:first-child { margin-top: 0; }
+.adm-backlog-list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 .co-head .co-date { font-size: var(--fs-sm); color: var(--muted); margin: 0; }
 .co-title { font: 700 var(--fs-display)/1.15 var(--font-display); margin: 4px 0 0; overflow-wrap: anywhere; }
 .co-dayh { display: flex; align-items: center; gap: 8px; font: 600 var(--fs-lg)/1.3 var(--font); margin: 28px 0 12px; }
@@ -9593,10 +9621,6 @@ details.qt-later[open] > summary { margin-bottom: 12px; }
 .co-parked[open] > summary .cd-done-caret { transform: rotate(180deg); }
 .co-row-r .co-btn + .co-btn { margin-left: 6px; }
 /* "What changed": a few lines, once a release. */
-.co-news { display: grid; gap: 8px; margin: 0 0 20px; padding: 16px 20px; border-radius: var(--radius-xs); background: var(--soft); }
-.co-news b { font-weight: 600; }
-.co-news ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--ink-2); }
-.co-news .co-btn { justify-self: start; }
 
 /* The designer's wall: every piece a frame at its true shape, in the order to do them. */
 .co-wall { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
@@ -10998,6 +11022,9 @@ div.co-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190
 .sch-grid { min-width: 0; }
 .sch-frame .cal { border: 0; border-radius: 0; box-shadow: none; }
 .sch-frame .card.empty { margin: 14px; }
+/* The crew's own month in the same frame (N-01): the strip above, the grid in. */
+.sch-mine-body { padding: 14px; }
+.sch-mine-body .cc-drag-help { margin-top: 0; }
 .sch-grid .mcal-undated, .sch-grid .mcal-hint { padding: 0 16px 12px; }
 .sch-opt:focus-visible, .sch-view-btn:focus-visible, .sch-clear:focus-visible { outline: 2px solid var(--brand-500); outline-offset: -2px; }
 
@@ -11136,3 +11163,78 @@ div.co-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190
 .co-line-plan .co-line-s > button { flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; text-align: center; }
 .co-line-plan .co-line-txt { justify-items: center; }
 .co-line-plan .co-line-s + .co-line-s::before { align-self: flex-start; margin-top: 23px; }
+
+/* A pravka as its list of changes (PravkaList.jsx): Gemini's items under the
+   reviewer's own words, ticked off by whoever fixes it. */
+.co-pl { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--surface); }
+.co-pl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.co-pl-count { color: var(--muted); font-size: 0.85em; }
+.co-pl-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.co-pl-item { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.4; }
+.co-pl-item input { margin-top: 3px; accent-color: var(--kind-cut); }
+.co-pl-item input:disabled { cursor: default; }
+.co-pl-item.is-done span { color: var(--muted); text-decoration: line-through; }
+.co-pl-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 0.8em; }
+.co-pl-heard summary { cursor: pointer; }
+.co-pl-heard p { margin: 4px 0 0; white-space: pre-wrap; color: var(--ink); }
+.co-pl-wait { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--muted); font-size: 0.85em; }
+
+/* Jarvis (JarvisDock.jsx): a round button in the corner for the admins who
+   run the whole team; pressed, a card to ask it and read what it spotted.
+   Under the uploads card, which covers it while files go, and under the
+   first-visit tour (60) in the same corner; on a phone, above the tab bar. */
+.co-jv-fab { position: fixed; right: 18px; bottom: 18px; z-index: 58; width: 48px; height: 48px; border: 1px solid var(--hairline); border-radius: 50%; background: var(--surface); color: var(--kind-cut); display: grid; place-items: center; box-shadow: var(--shadow-lg); cursor: pointer; }
+.co-jv-fab:hover { background: var(--surface-2); }
+.co-jv-fab:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 2px; }
+.co-jv { position: fixed; right: 18px; bottom: 18px; z-index: 88; width: min(400px, calc(100vw - 32px)); max-height: min(70vh, 640px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); box-shadow: var(--shadow-lg); overflow: hidden; }
+.co-jv-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--hairline); color: var(--kind-cut); }
+.co-jv-head > b { flex: 1; color: var(--ink); font-weight: 600; }
+.co-jv-body { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.co-jv-label { font-size: 0.85em; }
+.co-jv-quiet { margin: 0; color: var(--muted); font-size: 0.9em; }
+.co-jv-alerts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
+.co-jv-alerts a, .co-jv-said a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.co-jv-turn { display: flex; flex-direction: column; gap: 6px; }
+.co-jv-q { margin: 0; align-self: flex-end; max-width: 85%; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.co-jv-said p { margin: 0 0 4px; line-height: 1.45; }
+.co-jv-said ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; line-height: 1.45; }
+.co-jv-ask { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--hairline); }
+.co-jv-ask .btn { align-self: flex-start; }
+.co-jv-row { display: flex; gap: 8px; }
+.co-jv-row .input { flex: 1; min-width: 0; }
+@media (max-width: 640px) {
+  .co-jv-fab { right: 16px; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  .co-jv { right: 16px; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 150px); }
+}
+/* ---- the admin's day: steps with nobody in the seat, on the page (24 Oct 2026) ---- */
+.co-ad-seatless { padding: 14px 16px 10px; }
+.co-ad-seatless .co-grp-h p { margin: 2px 0 8px; font-size: var(--fs-sm); color: var(--muted); }
+
+/* ==== T-02 remainder (23 Oct 2026): the brief is never blank, the colour is its last row ==== */
+.tb-line.tb-skel { min-height: 46px; align-items: center; cursor: default; }
+.tb-skel-bar { display: block; height: 12px; width: 40%; border-radius: var(--radius-xs); background: var(--hairline); animation: tb-pulse 1.2s ease-in-out infinite; }
+@keyframes tb-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .tb-skel-bar { animation: none; } }
+.tb-colour { display: flex; flex-direction: column; gap: 8px; }
+.tb-colour .pc-filter { margin: 0; }
+
+/* ==== T-01 (23 Oct 2026): Edit is the builder ====
+   Editing on a desk: the steps as a left column with their answers in grey,
+   the chosen step on the right; on a phone the dots, one step a screen. */
+.tb-edit { display: grid; grid-template-columns: 200px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; align-content: start; gap: 0 24px; }
+.tb-edit > .tb-top, .tb-edit > .tb-stage-wrap, .tb-edit > .tb-err, .tb-edit > .tb-restored { grid-column: 2; }
+.tb-side { grid-column: 1; grid-row: 1 / span 4; list-style: none; margin: 0; padding: 0 16px 0 0; display: grid; gap: 2px; align-content: start; border-right: 1px solid var(--hairline); }
+.tb-side-b { display: grid; gap: 1px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.tb-side-b b { font-size: var(--fs-sm); font-weight: 600; }
+.tb-side-b small { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tb-side-b.on { background: var(--surface-2); }
+.tb-side-b:focus-visible { outline: 2px solid var(--ink); outline-offset: 0; }
+.tb-edit .tb-progress { visibility: hidden; }
+.modal-body.tb-body-edit { height: min(560px, calc(90vh - 150px)); }
+@media (hover: hover) { .tb-side-b:not(.on):hover { background: var(--surface-2); } }
+@media (max-width: 640px) {
+  .tb-edit { grid-template-columns: minmax(0, 1fr); }
+  .tb-edit > .tb-top, .tb-edit > .tb-stage-wrap, .tb-edit > .tb-err, .tb-edit > .tb-restored { grid-column: 1; }
+  .tb-side { display: none; }
+  .tb-edit .tb-progress { visibility: visible; }
+}

@@ -1,0 +1,830 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Clapperboard, Scissors, AlertTriangle, Clock, Pencil, Check, LayoutGrid, CalendarDays, Rows3, Palette, CheckCircle2, RotateCcw,
+  UserRound,
+} from 'lucide-react'
+import { api, cache } from '../../lib/api.js'
+import { getPicks, byPicks, bumpPick } from '../../lib/picks.js'
+import { useTaskSync } from '../../lib/useTaskSync.js'
+import { useAuth } from '../../lib/auth.jsx'
+import { useChannels } from '../../lib/channels.jsx'
+import { todayISO, addDaysISO, dateLabel, scheduleLabel, WORK_DAYS, isDeletedLabel, tashkentDay } from '../../lib/constants.js'
+import { editDue, reviewDue } from '../../lib/due.js'
+import Avatar from '../Avatar.jsx'
+import Modal from '../Modal.jsx'
+import ContentModal from '../ContentModal.jsx'
+import CrewAgenda from '../CrewAgenda.jsx'
+import { useIsPhone } from '../../lib/usePhone.js'
+import { useContextMenu } from '../ContextMenu.jsx'
+import { assigneesOf } from '../ContentFilters.jsx'
+import { toast, loadFailed } from '../../lib/toast.js'
+import { markDone } from '../../lib/finish.js'
+import { rewardIfFinished } from '../../lib/reward.js'
+import { tr as tx } from '../../lib/i18n.jsx'
+import { Dot, CountDot } from '../Dot.jsx'
+import { useClash } from '../ClashDialog.jsx'
+
+// The day a CUT is owed: the editor's own deadline, else the release it is
+// holding up. Both halves read through due.js, so a deadline re-promised
+// after a late handover is the one this page draws and counts late — the
+// same day the server is working to. Reading only `edit_ready_date` here is
+// how an editor came to see one day on their desk and be judged against
+// another.
+const cutDue = (t) => editDue(t) || reviewDue(t)
+// Which field a cut's deadline actually LIVES in, for anything that writes
+// one. Moving a re-promised deadline has to move the re-promise: writing the
+// original underneath it changes a day nobody is working to and leaves the
+// card exactly where it was, which is the drag that looked broken.
+const cutDueField = (t) => (t?.edit_due_revised ? 'edit_due_revised' : 'edit_ready_date')
+
+// Post Production — the admin's view of everyone who MAKES the content, in
+// two sub-pages:
+//   Editors & shooters — deck / timetable / list of shoots and cuts, with a
+//     person filter; load is real, not guessed — booked shoot hours against
+//     each person's working schedule.
+//   Designers — one card per designer: designs in work, due this week,
+//     overdue against the design deadline, done in the last 30 days.
+// Every task block wears its channel, so you never have to open it to know
+// where it goes.
+
+const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+const SHOOT_MIN = 60 // a shoot without an end time blocks one hour
+const DEFAULT_DAYS = [1, 2, 3, 4, 5] // Mon–Fri when no schedule is set
+const DEFAULT_HOURS = 8 * 60
+
+const crewWord = (u) => {
+  const caps = u.crew_roles || []
+  if (caps.length === 0) return null
+  return caps.map((c) => c[0].toUpperCase() + c.slice(1)).join(' & ')
+}
+
+// ---- per-designer workload ----
+function designWorkOf(u, content, today) {
+  const mine = content.filter((t) => t.designer_id === u.id)
+  const open = mine.filter((t) => !t.done_at)
+    .sort((a, b) => (a.design_ready_date || a.release_date || '9999').localeCompare(b.design_ready_date || b.release_date || '9999'))
+  const overdue = open.filter((t) => t.design_ready_date && t.design_ready_date < today && !t.ready_at)
+  const week = open.filter((t) => t.design_ready_date && t.design_ready_date >= today && t.design_ready_date < addDaysISO(today, 7))
+  const done30 = mine.filter((t) => t.done_at && tashkentDay(t.done_at) >= addDaysISO(today, -30))
+  return { open, overdue, week, done30 }
+}
+
+// ---- per-member workload over the next 7 days ----
+function workloadOf(u, content, today) {
+  const days = []
+  const wdays = Array.isArray(u.work_days) && u.work_days.length ? u.work_days : DEFAULT_DAYS
+  const dayCap = u.work_start && u.work_end ? toMin(u.work_end) - toMin(u.work_start) : DEFAULT_HOURS
+  let booked = 0
+  let capacity = 0
+  let clashes = 0
+  for (let i = 0; i < 7; i++) {
+    const iso = addDaysISO(today, i)
+    const weekday = new Date(`${iso}T12:00:00Z`).getUTCDay()
+    const working = wdays.includes(weekday)
+    if (working) capacity += dayCap
+    const shoots = content
+      .filter((t) => t.operator_id === u.id && !t.done_at && t.recording_date === iso)
+      .sort((a, b) => (a.recording_time || '99').localeCompare(b.recording_time || '99'))
+    let mins = 0
+    for (let s = 0; s < shoots.length; s++) {
+      const a = shoots[s]
+      const as = a.recording_time ? toMin(a.recording_time) : null
+      const ae = a.recording_end ? toMin(a.recording_end) : as !== null ? as + SHOOT_MIN : null
+      mins += as !== null ? ae - as : SHOOT_MIN
+      for (let z = s + 1; z < shoots.length; z++) {
+        const b = shoots[z]
+        if (as === null || !b.recording_time) continue
+        const bs = toMin(b.recording_time)
+        const be = b.recording_end ? toMin(b.recording_end) : bs + SHOOT_MIN
+        if (as < be && bs < ae) clashes++
+      }
+    }
+    booked += mins
+    days.push({ iso, working, shoots, mins })
+  }
+  const edits = content.filter((t) => t.editor_id === u.id && !t.done_at)
+    .sort((a, b) => (a.release_date || '9999').localeCompare(b.release_date || '9999'))
+  const overdue = content.filter((t) =>
+    !t.done_at && t.release_date && t.release_date < today &&
+    (assigneesOf(t).includes(u.id) || t.operator_id === u.id || t.editor_id === u.id))
+  const pct = capacity > 0 ? booked / capacity : 0
+  const level = pct >= 0.8 || edits.length >= 6 ? 'hot' : pct <= 0.3 && edits.length <= 2 ? 'free' : 'ok'
+  return { days, booked, capacity, pct, clashes, edits, overdue, level }
+}
+
+const LEVELS = {
+  hot: { label: 'Overloaded', cls: 'load-hot' },
+  ok: { label: 'Balanced', cls: 'load-ok' },
+  free: { label: 'Has capacity', cls: 'load-free' },
+}
+const hrs = (min) => (min % 60 === 0 ? `${min / 60}h` : `${Math.floor(min / 60)}h${min % 60}`)
+
+/* Admin sets a member's schedule right from the deck. */
+function ScheduleModal({ member, onClose, onSaved }) {
+  const [days, setDays] = useState(() => (Array.isArray(member.work_days) ? member.work_days : []))
+  const [start, setStart] = useState(member.work_start || '')
+  const [end, setEnd] = useState(member.work_end || '')
+  const [err, setErr] = useState('')
+  const toggle = (d) => setDays((p) => (p.includes(d) ? p.filter((x) => x !== d) : [...p, d].sort()))
+  const save = async () => {
+    setErr('')
+    try {
+      const u = await api.patch(`/users/${member.id}`, {
+        work_start: start || null, work_end: end || null, work_days: days.length ? days : null,
+      })
+      toast(tx('Schedule saved — synced'))
+      onSaved(u)
+      onClose()
+    } catch (e) { setErr(e.message) }
+  }
+  return (
+    <Modal title={`${member.name} — working schedule`} onClose={onClose}
+      footer={<>
+        <span className="foot-gap" />
+        <button className="btn" onClick={onClose}>{tx("Cancel")}</button>
+        <button className="btn btn-primary" onClick={save}><Check size={15} />{' '}{tx("Save schedule")}</button>
+      </>}>
+      {err && <div className="form-error">{err}</div>}
+      <div className="stat-sub" style={{ marginBottom: 10 }}>
+        Shoots for {member.name.split(' ')[0]} can only be booked inside these hours.
+      </div>
+      <div className="wd-row">
+        {WORK_DAYS.map((d) => (
+          <button key={d.n} type="button" className={'wd-chip' + (days.includes(d.n) ? ' on' : '')} onClick={() => toggle(d.n)}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+      <div className="sched-hours">
+        <label className="sched-field">from
+          <input className="input" type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+        </label>
+        <label className="sched-field">to
+          <input className="input" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </label>
+      </div>
+    </Modal>
+  )
+}
+
+const VIEWS = [
+  { key: 'deck', label: 'Deck', icon: LayoutGrid },
+  { key: 'week', label: tx('Timetable'), icon: CalendarDays },
+  { key: 'list', label: 'List', icon: Rows3 },
+]
+
+// The late tray, with a ceiling.
+//
+// Both copies of this rendered every overdue piece there was. On a real board
+// that is fifty chips stacked above the timetable they are meant to be dragged
+// onto — you scroll past the problem to reach the place you fix it. Oldest
+// first, because the piece that has been late longest is the one to rebook,
+// and the rest wait behind a count until they are asked for.
+const LATE_SHOWN = 6
+function LateTray({ groups, onOpen, startDrag, endDrag }) {
+  const [all, setAll] = useState(false)
+  const flat = groups
+    .flatMap((g) => g.items.map((t) => ({ ...g, t })))
+    .sort((a, b) => String(a.dateOf(a.t)).localeCompare(String(b.dateOf(b.t))))
+  if (flat.length === 0) return null
+  const shown = all ? flat : flat.slice(0, LATE_SHOWN)
+  return (
+    <div className="cal-tray crew-late-tray">
+      <span className="cal-tray-label">
+        <AlertTriangle size={13} />{' '}{tx('Late — drag onto a day to rebook')}
+        <b className="late-count">{flat.length}</b>
+      </span>
+      <div className="cal-tray-items">
+        {shown.map(({ t, kind, Icon, who, hue, dateOf }) => (
+          <div key={`${kind}${t.id}`} className="cal-tray-chip" draggable
+            onDragStart={(e) => startDrag(e, t, kind)} onDragEnd={endDrag}
+            onClick={() => onOpen(t)} title={t.title}>
+            <Icon size={12} />
+            <span className="ev-txt">{t.title}</span>
+            <span className="chip chip-danger crew-who-chip" style={hue ? { '--who': hue(t) } : undefined}>{who(t)} · {dateLabel(dateOf(t))}</span>
+          </div>
+        ))}
+        {flat.length > LATE_SHOWN && (
+          <button type="button" className="cal-tray-chip late-more" onClick={() => setAll(!all)}>
+            {all ? tx('Show fewer') : tx('{n} more', { n: flat.length - LATE_SHOWN })}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Team → Workload (N-03): the Post Production page (/crew), lifted whole —
+// the crew's and the designers' desks, as the deck, the timetable or the
+// list. Everything below is as it was.
+export default function Workload() {
+  const { user } = useAuth()
+  const { byKey } = useChannels()
+  const [boot] = useState(() => cache.get('crew'))
+  const [content, setContent] = useState(boot?.content || [])
+  const [users, setUsers] = useState(boot?.users || [])
+  const [statuses, setStatuses] = useState(boot?.statuses || [])
+  const [loading, setLoading] = useState(!boot)
+  const [openItem, setOpenItem] = useState(null)
+  const [schedFor, setSchedFor] = useState(null)
+  // Killed pieces (Deleted stage) are nobody's workload — drop them before
+  // any shoots/edits/design math runs.
+  const live = useMemo(() => {
+    const dead = new Set(statuses.filter((s) => isDeletedLabel(s.label)).map((s) => s.id))
+    return content.filter((t) => !dead.has(t.status_id))
+  }, [content, statuses])
+  const [savedView, setViewState] = useState(() => localStorage.getItem('satashkent_crew_view') || 'deck')
+  const setView = (v) => { setViewState(v); localStorage.setItem('satashkent_crew_view', v) }
+  // On a phone the three desk views give way to one: a day at a time, as a
+  // list (CrewAgenda). The desk's choice is kept, untouched, for the desk.
+  const phone = useIsPhone()
+  const view = phone ? 'agenda' : savedView
+  // The design sub-page keeps its own view choice — deck of cards or the grid.
+  const [dview, setDviewState] = useState(() => localStorage.getItem('satashkent_crew_dview') || 'deck')
+  const setDview = (v) => { setDviewState(v); localStorage.setItem('satashkent_crew_dview', v) }
+  const [tab, setTabState] = useState(() => localStorage.getItem('satashkent_pp_tab') || 'video')
+  const setTab = (t) => { setTabState(t); setWho(0); localStorage.setItem('satashkent_pp_tab', t) }
+  const [who, setWho] = useState(0) // 0 = everyone
+  // Every OPEN Pravki across the team — who owes changes, worn as chips.
+  const [openRevs, setOpenRevs] = useState([])
+
+  useEffect(() => {
+    Promise.all([api.get('/content'), api.get('/users'), api.cached('/statuses')])
+      .then(([ct, us, st]) => {
+        setContent(ct); setUsers(us); setStatuses(st)
+        cache.set('crew', { content: ct.map(({ photo_thumb: _t, ...r }) => r), users: us, statuses: st })
+      })
+      .catch(loadFailed)
+      .finally(() => setLoading(false))
+  }, [])
+  useEffect(() => {
+    if (user.role === 'admin') api.get('/content/open-revisions').then(setOpenRevs).catch(() => {})
+  }, [user.role])
+  useEffect(() => {
+    const refresh = () => {
+      if (document.hidden || openItem || schedFor) return
+      api.poll('/content').then((f) => { if (f) setContent(f) }).catch(() => {})
+      if (user.role === 'admin') api.pollView('/content/open-revisions').then((f) => { if (f) setOpenRevs(f) }).catch(() => {})
+    }
+    const id = setInterval(refresh, 10000)
+    return () => clearInterval(id)
+  }, [openItem, schedFor, user.role])
+
+  const today = todayISO()
+  // Open change-requests per person — the chip every card wears.
+  const pravkiBy = useMemo(() => {
+    const m = new Map()
+    for (const r of openRevs) if (r.person_id) m.set(r.person_id, (m.get(r.person_id) || 0) + 1)
+    return m
+  }, [openRevs])
+
+  // Only the crew proper: accounts holding the capability. Members who merely
+  // hold a hat on some task still show on that task everywhere else — but
+  // they are not columns on this page.
+  const crewAll = useMemo(
+    () => users.filter((u) => (u.crew_roles || []).some((r) => r === 'operator' || r === 'editor')),
+    [users])
+  const designersAll = useMemo(
+    () => users.filter((u) => (u.crew_roles || []).includes('designer')),
+    [users])
+  const designers = who ? designersAll.filter((u) => u.id === who) : designersAll
+  // Each person their own colour on this page (the owner, 13 Oct: "no colours —
+  // they get confused"): a colour they picked in their profile, else one of the
+  // ten, in the order of the crew. The same on the avatar, the row and the late chips.
+  const hueOf = useMemo(() => {
+    const m = {}
+    ;[...crewAll, ...designersAll.filter((d) => !crewAll.includes(d))].forEach((u, i) => {
+      m[u.id] = u.color && !/^#a22036$/i.test(u.color) ? u.color : `var(--pc-${(i % 10) + 1})`
+    })
+    return (u) => (u && m[u.id]) || u?.color
+  }, [crewAll, designersAll])
+  const crew = who ? crewAll.filter((u) => u.id === who) : crewAll
+
+  const loads = useMemo(() => {
+    const m = new Map()
+    for (const u of crewAll) m.set(u.id, workloadOf(u, live, today))
+    return m
+  }, [crewAll, live, today])
+
+  const week = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(today, i)), [today])
+
+  // Same bargain as the board: a hat is not something the server argues with,
+  // so the name moves the moment you press it. See lib/useTaskSync.js.
+  const { update: updateContent } = useTaskSync(setContent, { after: rewardIfFinished })
+  // A shoot dropped or given to somebody who is already filming then asks
+  // first, in the booking window — not a browser alert with no way through.
+  const [clashUi, askClash] = useClash()
+  // Right-click a shoot or edit block: the quick verbs.
+  const { openMenu } = useContextMenu()
+  // This page is where you find out somebody is carrying too much — three
+  // overdue, a full week, a queue eight deep. The answer to that is always to
+  // move a piece to somebody else, and until now the answer lived on another
+  // page: open the sheet, find the crew view, pick a name, save. It is here,
+  // beside the number that prompted it, on the hat the block is about — the
+  // shoot moves its operator, the cut its editor, the artwork its designer.
+  const CAP_OF = { operator_id: 'operator', editor_id: 'editor', designer_id: 'designer' }
+  const handTo = (hat) => {
+    const cap = CAP_OF[hat]
+    if (!cap) return []
+    return users.filter((u) => (u.crew_roles || []).includes(cap))
+      .sort(byPicks(getPicks(), (a, b) => a.name.localeCompare(b.name)))
+      .slice(0, 5)
+  }
+  const blockMenu = (e, t, hat = null) => openMenu(e, [
+    { label: 'Open', icon: Pencil, onClick: () => setOpenItem(t) },
+    { label: t.done_at ? 'Mark as not done' : 'Mark as done', icon: Check, onClick: () => markDone(t, updateContent, setOpenItem) },
+    ...(handTo(hat).length ? [{ sep: true }, ...handTo(hat).map((u) => ({
+      label: `${tx('Give to')} ${u.name}`, icon: UserRound,
+      hint: t[hat] === u.id ? tx('already theirs') : undefined,
+      disabled: t[hat] === u.id,
+      onClick: () => {
+        bumpPick(u.id)
+        const give = (force) => updateContent(t, { [hat]: u.id, ...(force ? { force: true } : {}) })
+          .then(() => toast(`${tx('Given to')} ${u.name.split(' ')[0]}`))
+        give(false).catch((err) => {
+          if (!askClash(err, () => give(true).catch((e2) => toast(e2.message, 'err')))) toast(err.message, 'err')
+        })
+      },
+    }))] : []),
+  ])
+  const deleteContent = async (item) => {
+    await api.del(`/content/${item.id}`)
+    setContent((prev) => prev.filter((x) => x.id !== item.id))
+  }
+
+  // ---- drag a block to rebook it ----
+  // A shoot dropped on another day moves the shoot; dropped on another
+  // person's row it changes the operator too. An edit-due card moves the
+  // edit deadline / the editor the same way. The Late tray above the grid
+  // holds work whose date already slipped out of the week — drag it back in.
+  const dragInfo = useRef(null) // { id, kind: 'shoot' | 'edit' }
+  const [dropCell, setDropCell] = useState(null)
+  const startDrag = (e, t, kind) => {
+    dragInfo.current = { id: t.id, kind }
+    try { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move' } catch { /* ok */ }
+  }
+  const endDrag = () => { dragInfo.current = null; setDropCell(null) }
+  const overCell = (e, key) => {
+    if (!dragInfo.current) return
+    e.preventDefault()
+    if (dropCell !== key) setDropCell(key)
+  }
+  // personId null = keep whoever holds the hat (day-only drops in the List).
+  const dropTask = async (personId, iso) => {
+    const drag = dragInfo.current
+    endDrag()
+    if (!drag) return
+    const t = content.find((x) => x.id === drag.id)
+    if (!t) return
+    const patch = {}
+    if (drag.kind === 'shoot') {
+      if ((t.recording_date || null) !== iso) patch.recording_date = iso
+      if (personId && t.operator_id !== personId) patch.operator_id = personId
+    } else if (drag.kind === 'design') {
+      if ((t.design_ready_date || null) !== iso) patch.design_ready_date = iso
+      if (personId && t.designer_id !== personId) patch.designer_id = personId
+    } else {
+      // Move the day that is actually live. Once a late handover has been
+      // re-promised, the revised day is the one the editor agreed to and the
+      // one the server counts against — so writing the original underneath it
+      // moves a day nobody is working to, and the card springs back to where
+      // it was. That is the drag that looked broken.
+      const dueField = cutDueField(t)
+      if ((t[dueField] || null) !== iso) patch[dueField] = iso
+      if (personId && t.editor_id !== personId) patch.editor_id = personId
+    }
+    if (Object.keys(patch).length === 0) return
+    // Remember what the drop overwrote, so the toast can take it back.
+    const before = Object.fromEntries(Object.keys(patch).map((k) => [k, t[k] ?? null]))
+    try {
+      await updateContent(t, patch)
+      toast(drag.kind === 'shoot' ? 'Shoot rebooked — synced' : drag.kind === 'design' ? 'Design deadline moved — synced' : 'Edit deadline moved — synced', 'ok', {
+        label: 'Undo',
+        onClick: () => updateContent(t, before)
+          .then(() => toast(tx('Put back — synced')))
+          .catch((e) => alert(e.message)),
+      })
+    } catch (e) {
+      const again = async () => {
+        try {
+          await updateContent(t, { ...patch, force: true })
+          toast('Shoot rebooked — synced')
+        } catch (e2) { alert(e2.message) }
+      }
+      if (!askClash(e, again)) alert(e.message)
+    }
+  }
+
+  if (loading) return <div className="app-loading"><span className="spinner" /></div>
+
+  const totalShoots = crew.reduce((n, u) => n + loads.get(u.id).days.reduce((x, d) => x + d.shoots.length, 0), 0)
+  const hot = crew.filter((u) => loads.get(u.id).level === 'hot')
+  const free = crew.filter((u) => loads.get(u.id).level === 'free')
+
+  const dTotals = designersAll.reduce((acc, u) => {
+    const w = designWorkOf(u, live, today)
+    acc.open += w.open.length
+    acc.overdue += w.overdue.length
+    return acc
+  }, { open: 0, overdue: 0 })
+
+  return (
+    <>
+      {clashUi}
+      {/* Round 10: one plain sentence. The page's name is in the bar above. */}
+      <div className="card card-pad brief-hero pp-sum">
+        <h2 className="brief-title">
+          {tab === 'video' ? (
+            crewAll.length === 0 ? tx('No crew yet — give someone the operator or editor role.') : (
+              <>
+                {who ? tx('{n} selected', { n: crew.length }) : tx('{n} on the crew', { n: crew.length })} · {tx('Shoots booked: {n}', { n: totalShoots })}
+                {hot.length > 0 && <> · <span style={{ color: 'var(--critical)' }}>{tx('{names} overloaded', { names: hot.map((u) => u.name.split(' ')[0]).join(', ') })}</span></>}
+                {free.length > 0 && <> · {tx('{names} free', { names: free.map((u) => u.name.split(' ')[0]).join(', ') })}</>}
+              </>
+            )
+          ) : (
+            designersAll.length === 0 ? 'No designers yet — give someone the designer role.' : (
+              <>
+                {designersAll.length} designer{designersAll.length === 1 ? '' : 's'} · {dTotals.open} design{dTotals.open === 1 ? '' : 's'} in work
+                {dTotals.overdue > 0 && <> · <span style={{ color: 'var(--critical)' }}>{dTotals.overdue} overdue</span></>}
+                {openRevs.filter((r) => r.target === 'designer').length > 0 && (
+                  <> · <span style={{ color: 'var(--critical)' }}>{openRevs.filter((r) => r.target === 'designer').length} change{openRevs.filter((r) => r.target === 'designer').length === 1 ? '' : 's'} requested</span></>
+                )}
+              </>
+            )
+          )}
+        </h2>
+      </div>
+
+      {/* sub-page first, then the view + person controls */}
+      <div className="miss-filters">
+        <div className="pill-group pp-tabs">
+          <button className={'pill' + (tab === 'video' ? ' active' : '')} onClick={() => setTab('video')}>
+            <Clapperboard size={14} />{' '}{tx('Editors & shooters')}
+          </button>
+          <button className={'pill' + (tab === 'design' ? ' active' : '')} onClick={() => setTab('design')}>
+            <Palette size={14} />{' '}{tx('Designers')}
+          </button>
+        </div>
+        {tab === 'design' && (
+          <div className="pill-group">
+            {[{ key: 'deck', label: 'Deck', icon: LayoutGrid }, { key: 'week', label: tx('Timetable'), icon: CalendarDays }].map((v) => {
+              const Icon = v.icon
+              return (
+                <button key={v.key} className={'pill' + (dview === v.key ? ' active' : '')} onClick={() => setDview(v.key)}>
+                  <Icon size={14} /> {v.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {tab === 'video' && !phone && (
+          <div className="pill-group">
+            {VIEWS.map((v) => {
+              const Icon = v.icon
+              return (
+                <button key={v.key} className={'pill' + (view === v.key ? ' active' : '')} onClick={() => setView(v.key)}>
+                  <Icon size={14} /> {v.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {/* One control that says who is showing — a row of name pills beside
+            two other rows of pills was three things to read (round 10). */}
+        {(tab === 'video' ? crewAll : designersAll).length > 0 && (
+          <select className="select cf-sel pp-who" value={who} onChange={(e) => setWho(Number(e.target.value))}
+            aria-label={tx('Everyone')}>
+            <option value={0}>{tx('Everyone')}</option>
+            {(tab === 'video' ? crewAll : designersAll).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* ---- Designers: one card per designer, judged by the design date ---- */}
+      {tab === 'design' && dview === 'deck' && designers.map((u) => {
+        const w = designWorkOf(u, live, today)
+        return (
+          <div key={u.id} className="card crew-card">
+            <div className="crew-head">
+              <Avatar name={u.name} color={hueOf(u)} src={u.avatar} />
+              <div className="crew-who">
+                <b>{u.name}</b>
+                <span className="stat-sub">{u.position || crewWord(u) || 'Designer'}</span>
+              </div>
+              {w.overdue.length > 0
+                ? <CountDot n={w.overdue.length} tone="late" />
+                : <span className="load-badge load-free">{tx("On schedule")}</span>}
+            </div>
+            <div className="crew-nums">
+              <span className="crew-num"><Palette size={13} /> {w.open.length} in work</span>
+              <span className="crew-num"><CalendarDays size={13} /> {w.week.length} due this week</span>
+              {w.overdue.length > 0 && <span className="crew-num crew-num-bad"><AlertTriangle size={13} /> {w.overdue.length} past the design date</span>}
+              {(pravkiBy.get(u.id) || 0) > 0 && <span className="crew-num crew-num-bad"><RotateCcw size={13} /> {pravkiBy.get(u.id)} pravki waiting</span>}
+              <span className="crew-num"><CheckCircle2 size={13} /> {w.done30.length} done in 30 days</span>
+            </div>
+            {w.open.length > 0 && (
+              <div className="design-queue">
+                {w.open.slice(0, 8).map((t) => {
+                  const late = t.design_ready_date && t.design_ready_date < today && !t.ready_at
+                  return (
+                    <button key={t.id} className="ov-row" onClick={() => setOpenItem(t)} onContextMenu={(e) => blockMenu(e, t, 'designer_id')}>
+                      <span className={'crew-list-time crew-list-edit' + (late ? ' late-txt' : '')}>
+                        <Palette size={13} /> {t.design_ready_date ? `Due ${dateLabel(t.design_ready_date)}` : 'No design date'}
+                      </span>
+                      <span className="ov-title">{t.title}</span>
+                      <span className="ov-chips">
+                        {t.channels.map((c) => <span key={c} className="chip chip-muted">{byKey[c]?.label || c}</span>)}
+                        {late && <Dot tone="late" label={tx('late')} />}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {tab === 'design' && designers.length === 0 && (
+        <div className="card card-pad empty">{tx('No crew')}</div>
+      )}
+
+      {/* ---- The design week: designers × days, every card draggable ----
+          Same grammar as the editors' grid: drop on a day to rebook the
+          design deadline, on another designer's row to hand the artwork
+          over; slipped work waits in the Late tray; every drop can Undo. */}
+      {tab === 'design' && dview === 'week' && designers.length > 0 && (() => {
+        const dIds = new Set(designers.map((u) => u.id))
+        const lateDesigns = live.filter((t) => !t.done_at && !t.ready_at && dIds.has(t.designer_id) &&
+          t.design_ready_date && t.design_ready_date < today)
+        const nameOf = (id) => users.find((x) => x.id === id)?.name?.split(' ')[0] || '?'
+        const wdaysOf = (u) => (Array.isArray(u.work_days) && u.work_days.length ? u.work_days : DEFAULT_DAYS)
+        return (
+          <>
+            <LateTray onOpen={setOpenItem} startDrag={startDrag} endDrag={endDrag} groups={[
+              { kind: 'design', Icon: Palette, items: lateDesigns,
+                who: (t) => nameOf(t.designer_id), hue: (t) => hueOf({ id: t.designer_id }), dateOf: (t) => t.design_ready_date },
+            ]} />
+            <div className="card table-wrap tt-wrap">
+              <table className="crew-tt">
+                <thead>
+                  <tr>
+                    <th className="tt-who-col" />
+                    {week.map((iso) => (
+                      <th key={iso} className={iso === today ? 'tt-today' : ''}>{dateLabel(iso)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {designers.map((u) => {
+                    const wdays = wdaysOf(u)
+                    return (
+                      <tr key={u.id}>
+                        <td className="tt-who-col" style={{ '--who': hueOf(u) }}>
+                          <span className="tt-who">
+                            <Avatar name={u.name} color={hueOf(u)} src={u.avatar} size="sm" />
+                            <span>
+                              <b>{u.name.split(' ')[0]}</b>
+                              <small>{(pravkiBy.get(u.id) || 0) > 0 ? `${pravkiBy.get(u.id)} pravki waiting` : (u.position || 'Designer')}</small>
+                            </span>
+                          </span>
+                        </td>
+                        {week.map((iso) => {
+                          const working = wdays.includes(new Date(`${iso}T12:00:00Z`).getUTCDay())
+                          const dues = live.filter((t) => t.designer_id === u.id && !t.done_at && !t.ready_at && t.design_ready_date === iso)
+                          const cellKey = `d${u.id}|${iso}`
+                          return (
+                            <td key={iso}
+                              className={(working ? '' : 'tt-off') + (iso === today ? ' tt-today' : '') + (dropCell === cellKey ? ' tt-drop' : '')}
+                              onDragOver={(e) => overCell(e, cellKey)}
+                              onDragLeave={() => { if (dropCell === cellKey) setDropCell(null) }}
+                              onDrop={(e) => { e.preventDefault(); dropTask(u.id, iso) }}>
+                              {!working && dues.length === 0 && <span className="tt-off-txt">{tx("off")}</span>}
+                              {dues.map((t) => (
+                                <button key={`d${t.id}`} className="tt-shoot tt-design" draggable
+                                  onDragStart={(e) => startDrag(e, t, 'design')} onDragEnd={endDrag}
+                                  onClick={() => setOpenItem(t)} onContextMenu={(e) => blockMenu(e, t, 'designer_id')} title={t.title}>
+                                  <b><Palette size={11} />{' '}{tx("Design due")}</b>
+                                  <span>{t.title}</span>
+                                  <i className="tt-ch">{t.channels.map((c) => byKey[c]?.label || c).join(' · ')}</i>
+                                </button>
+                              ))}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )
+      })()}
+
+      {/* ---- Deck: one calm card per person ---- */}
+      {tab === 'video' && view === 'deck' && crew.map((u) => {
+        const w = loads.get(u.id)
+        const lv = LEVELS[w.level]
+        const sched = scheduleLabel(u)
+        return (
+          <div key={u.id} className="card crew-card">
+            <div className="crew-head">
+              <Avatar name={u.name} color={hueOf(u)} src={u.avatar} />
+              <div className="crew-who">
+                <b>{u.name}</b>
+                <span className="stat-sub">
+                  {[u.position || crewWord(u) || 'Member', sched].filter(Boolean).join(' · ')}
+                  {!sched && <button className="lnk" onClick={() => setSchedFor(u)}>{tx("set the schedule")}</button>}
+                </span>
+              </div>
+              <span className={`load-badge ${lv.cls}`}>{lv.label}</span>
+              {user.role === 'admin' && (
+                <button className="icon-btn" data-tip={tx("Working schedule")} data-tip-left="" aria-label={tx("Edit schedule")}
+                  onClick={() => setSchedFor(u)}><Pencil size={14} /></button>
+              )}
+            </div>
+            <div className="crew-meter">
+              <div className="crew-meter-bar">
+                <span className={`crew-meter-fill ${lv.cls}`} style={{ width: `${Math.min(100, Math.round(w.pct * 100))}%` }} />
+              </div>
+              <span className="crew-meter-txt">
+                {hrs(w.booked)} of {hrs(w.capacity)} shoot hours booked
+              </span>
+            </div>
+            <div className="crew-nums">
+              {/* Round 10: a count that is nought is not said. */}
+              {w.days.some((d) => d.shoots.length > 0) && <span className="crew-num"><Clapperboard size={13} /> {w.days.reduce((n, d) => n + d.shoots.length, 0)} shoots</span>}
+              {w.edits.length > 0 && <span className="crew-num"><Scissors size={13} /> {w.edits.length} in editing</span>}
+              {w.overdue.length > 0 && <span className="crew-num crew-num-bad"><AlertTriangle size={13} /> {w.overdue.length} overdue</span>}
+              {(pravkiBy.get(u.id) || 0) > 0 && <span className="crew-num crew-num-bad"><RotateCcw size={13} /> {pravkiBy.get(u.id)} pravki waiting</span>}
+              {w.clashes > 0 && <span className="crew-num crew-num-bad"><Clock size={13} /> {w.clashes} time clash{w.clashes === 1 ? '' : 'es'}</span>}
+              <span className="spacer" />
+              {(() => {
+                const d = w.days.find((x) => x.shoots.length > 0)
+                return d ? <span className="stat-sub">next shoot: {dateLabel(d.iso)}{d.shoots[0].recording_time ? ` ${d.shoots[0].recording_time}` : ''}</span> : null
+              })()}
+            </div>
+          </div>
+        )
+      })}
+
+      {/* ---- Timetable: the big week grid, people × days ---- */}
+      {tab === 'video' && view === 'week' && (() => {
+        // Work whose date slipped out of the week is invisible on the grid —
+        // the Late tray keeps it in hand, ready to be dragged onto a day.
+        const crewIds = new Set(crew.map((u) => u.id))
+        // Filmed is filmed, whatever day it was booked for — the same reading
+        // the phone's agenda (CrewAgenda) and My Day make.
+        const filmed = (t) => !!t.shot_at || !!t.ready_at
+          || /shot|edit|ready|publish|post|got/i.test(statuses.find((s) => s.id === t.status_id)?.label || '')
+        const lateShoots = live.filter((t) => !t.done_at && !filmed(t) && t.recording_date && t.recording_date < today && crewIds.has(t.operator_id))
+        const lateCuts = live.filter((t) => !t.done_at && !t.ready_at && crewIds.has(t.editor_id) &&
+          cutDue(t) && cutDue(t) < today)
+        const nameOf = (id) => users.find((x) => x.id === id)?.name?.split(' ')[0] || '?'
+        return (
+          <>
+            <LateTray onOpen={setOpenItem} startDrag={startDrag} endDrag={endDrag} groups={[
+              { kind: 'shoot', Icon: Clapperboard, items: lateShoots,
+                who: (t) => nameOf(t.operator_id), hue: (t) => hueOf({ id: t.operator_id }), dateOf: (t) => t.recording_date },
+              { kind: 'edit', Icon: Scissors, items: lateCuts,
+                who: (t) => nameOf(t.editor_id), hue: (t) => hueOf({ id: t.editor_id }), dateOf: (t) => cutDue(t) },
+            ]} />
+        <div className="card table-wrap tt-wrap">
+          <table className="crew-tt">
+            <thead>
+              <tr>
+                <th className="tt-who-col" />
+                {week.map((iso) => (
+                  <th key={iso} className={iso === today ? 'tt-today' : ''}>{dateLabel(iso)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {crew.map((u) => {
+                const w = loads.get(u.id)
+                return (
+                  <tr key={u.id}>
+                    <td className="tt-who-col" style={{ '--who': hueOf(u) }}>
+                      <span className="tt-who">
+                        <Avatar name={u.name} color={hueOf(u)} src={u.avatar} size="sm" />
+                        <span>
+                          <b>{u.name.split(' ')[0]}</b>
+                          <small>{u.work_start && u.work_end
+                            ? `${u.work_start}–${u.work_end}`
+                            : user.role === 'admin'
+                              ? <button className="lnk" onClick={() => setSchedFor(u)}>{tx("set hours")}</button>
+                              : 'no hours set'}</small>
+                        </span>
+                      </span>
+                    </td>
+                    {w.days.map((d) => {
+                      const cuts = w.edits.filter((t) => cutDue(t) === d.iso)
+                      const cellKey = `${u.id}|${d.iso}`
+                      return (
+                        <td key={d.iso}
+                          className={(d.working ? '' : 'tt-off') + (d.iso === today ? ' tt-today' : '') + (dropCell === cellKey ? ' tt-drop' : '')}
+                          onDragOver={(e) => overCell(e, cellKey)}
+                          onDragLeave={() => { if (dropCell === cellKey) setDropCell(null) }}
+                          onDrop={(e) => { e.preventDefault(); dropTask(u.id, d.iso) }}>
+                          {!d.working && d.shoots.length === 0 && cuts.length === 0 && <span className="tt-off-txt">{tx("off")}</span>}
+                          {d.shoots.map((s) => (
+                            <button key={`s${s.id}`} className="tt-shoot" draggable
+                              onDragStart={(e) => startDrag(e, s, 'shoot')} onDragEnd={endDrag}
+                              onClick={() => setOpenItem(s)} onContextMenu={(e) => blockMenu(e, s, 'operator_id')} title={s.title}>
+                              <b><Clapperboard size={11} /> Shoot{s.recording_time ? ` · ${s.recording_time}${s.recording_end ? `–${s.recording_end}` : ''}` : ''}</b>
+                              <span>{s.title}</span>
+                              <i className="tt-ch">{s.channels.map((c) => byKey[c]?.label || c).join(' · ')}</i>
+                            </button>
+                          ))}
+                          {cuts.map((t) => (
+                            <button key={`e${t.id}`} className="tt-shoot tt-edit" draggable
+                              onDragStart={(e) => startDrag(e, t, 'edit')} onDragEnd={endDrag}
+                              onClick={() => setOpenItem(t)} onContextMenu={(e) => blockMenu(e, t, 'editor_id')} title={t.title}>
+                              <b><Scissors size={11} />{' '}{tx("Edit due")}</b>
+                              <span>{t.title}</span>
+                              <i className="tt-ch">{t.channels.map((c) => byKey[c]?.label || c).join(' · ')}</i>
+                            </button>
+                          ))}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {crew.length === 0 && <div className="empty">{tx("Nobody to show.")}</div>}
+        </div>
+          </>
+        )
+      })()}
+
+      {/* ---- Phone: a day at a time ---- */}
+      {tab === 'video' && view === 'agenda' && (
+        <CrewAgenda crew={crew} content={live} statuses={statuses} today={today} byKey={byKey} onOpen={setOpenItem} />
+      )}
+
+      {/* ---- List: the week as plain rows ---- */}
+      {tab === 'video' && view === 'list' && (
+        <div className="card card-pad" style={{ marginTop: 2 }}>
+          {week.map((iso) => {
+            const shoots = crew.flatMap((u) =>
+              loads.get(u.id).days.find((d) => d.iso === iso).shoots.map((s) => ({ s, u })))
+              .sort((a, b) => (a.s.recording_time || '99').localeCompare(b.s.recording_time || '99'))
+            const cuts = crew.flatMap((u) =>
+              loads.get(u.id).edits.filter((t) => cutDue(t) === iso).map((t) => ({ t, u })))
+            if (shoots.length === 0 && cuts.length === 0) return null
+            // A day group is a drop target too: dragging a row onto another
+            // day rebooks the date and keeps the person.
+            return (
+              <div key={iso} className={'crew-list-day' + (dropCell === `day|${iso}` ? ' tt-drop' : '')}
+                onDragOver={(e) => overCell(e, `day|${iso}`)}
+                onDragLeave={() => { if (dropCell === `day|${iso}`) setDropCell(null) }}
+                onDrop={(e) => { e.preventDefault(); dropTask(null, iso) }}>
+                <div className="brief-h-head">{dateLabel(iso)}{iso === today ? ' · today' : ''}</div>
+                {shoots.map(({ s, u }) => (
+                  <button key={`s${s.id}`} className="ov-row" draggable
+                    onDragStart={(e) => startDrag(e, s, 'shoot')} onDragEnd={endDrag}
+                    onClick={() => setOpenItem(s)} onContextMenu={(e) => blockMenu(e, s, 'operator_id')}>
+                    <span className="crew-list-time"><Clapperboard size={13} /> Shoot{s.recording_time ? ` · ${s.recording_time}${s.recording_end ? `–${s.recording_end}` : ''}` : ''}</span>
+                    <span className="ov-title">{s.title}</span>
+                    <span className="ov-chips">
+                      <span className="chip chip-muted">{u.name.split(' ')[0]}</span>
+                      {s.channels.map((c) => <span key={c} className="chip chip-muted">{byKey[c]?.label || c}</span>)}
+                    </span>
+                  </button>
+                ))}
+                {cuts.map(({ t, u }) => (
+                  <button key={`c${t.id}`} className="ov-row" draggable
+                    onDragStart={(e) => startDrag(e, t, 'edit')} onDragEnd={endDrag}
+                    onClick={() => setOpenItem(t)} onContextMenu={(e) => blockMenu(e, t, 'editor_id')}>
+                    <span className="crew-list-time crew-list-edit"><Scissors size={13} />{' '}{tx("Edit due")}</span>
+                    <span className="ov-title">{t.title}</span>
+                    <span className="ov-chips">
+                      <span className="chip chip-muted">{u.name.split(' ')[0]}</span>
+                      {t.channels.map((c) => <span key={c} className="chip chip-muted">{byKey[c]?.label || c}</span>)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+          {crew.every((u) => loads.get(u.id).days.every((d) => d.shoots.length === 0)) &&
+            crew.every((u) => loads.get(u.id).edits.every((t) => !week.includes(cutDue(t)))) && (
+            <div className="empty">{tx('No bookings')}</div>
+          )}
+        </div>
+      )}
+
+      {schedFor && (
+        <ScheduleModal member={schedFor} onClose={() => setSchedFor(null)}
+          onSaved={(u) => setUsers((prev) => prev.map((x) => (x.id === u.id ? u : x)))} />
+      )}
+      {openItem && (
+        <ContentModal key={openItem?.id || 'new'} item={openItem} statuses={statuses} onClose={(next) => setOpenItem(next?.id ? next : null)}
+          onUpdate={updateContent} onDelete={deleteContent} />
+      )}
+    </>
+  )
+}

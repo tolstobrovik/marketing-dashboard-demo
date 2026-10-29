@@ -5,6 +5,7 @@ import { api } from '../lib/api.js'
 import { tr as tx } from '../lib/i18n.jsx'
 import { playNotify } from '../lib/sound.js'
 import { toast } from '../lib/toast.js'
+import { WhatsNew, newsSeen, markNewsSeen } from './CoachParts.jsx'
 
 // A bell where everything wears the same arrow makes you read every line to
 // find the one that needs you. Being NAMED in a thread and being asked to
@@ -33,6 +34,12 @@ export default function NotificationsBell({ user }) {
   const [data, setData] = useState({ events: [], reminders: [] })
   const [open, setOpen] = useState(false)
   const [seen, setSeen] = useState(() => readSeen(user.id))
+  // "What changed" (D-06): the release's lines are the first item of the
+  // bell, counted in the badge until the bell is opened once after the
+  // release; they stay in view for that opening and are gone after it.
+  const [news, setNews] = useState(() => !newsSeen())
+  const [newsShown, setNewsShown] = useState(false)
+  const close = () => { setOpen(false); setNewsShown(false) }
   const wrapRef = useRef(null)
   const navigate = useNavigate()
 
@@ -75,13 +82,13 @@ export default function NotificationsBell({ user }) {
   // A tap anywhere else closes the panel.
   useEffect(() => {
     if (!open) return
-    const close = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
+    const away = (e) => { if (!wrapRef.current?.contains(e.target)) close() }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const unread = data.events.filter((e) => !e.read_at).length +
-    data.reminders.filter((r) => !seen.includes(r.id)).length
+    data.reminders.filter((r) => !seen.includes(r.id)).length + (news ? 1 : 0)
 
   const markAll = async () => {
     const ids = data.reminders.map((r) => r.id).slice(0, 200)
@@ -93,18 +100,20 @@ export default function NotificationsBell({ user }) {
     } catch { /* the badge just stays */ }
   }
   const go = (n) => {
-    setOpen(false)
+    close()
     if (n.content_id) navigate(`/brief?task=${n.content_id}`)
   }
 
   return (
     <span className="notif-wrap" ref={wrapRef}>
       <button className="icon-btn"
-        onClick={() => setOpen((o) => {
+        onClick={() => {
+          if (open) { close(); return }
           // opening the panel asks for the freshest news right away
-          if (!o) api.pollView('/notifications').then(take).catch(() => {})
-          return !o
-        })}
+          api.pollView('/notifications').then(take).catch(() => {})
+          if (news) { markNewsSeen(); setNews(false); setNewsShown(true) }
+          setOpen(true)
+        }}
         data-tip={tx("Notifications")} aria-label={`${tx('Notifications')}${unread ? ` — ${tx('{n} unread', { n: unread })}` : ''}`}>
         <Bell size={17} />
         {unread > 0 && <span className="notif-badge">{unread > 9 ? '9+' : unread}</span>}
@@ -117,7 +126,8 @@ export default function NotificationsBell({ user }) {
               <button className="lnk" onClick={markAll}><CheckCheck size={13} />{' '}{tx("Mark all read")}</button>
             )}
           </div>
-          {data.reminders.length === 0 && data.events.length === 0 && (
+          {newsShown && <WhatsNew onClose={() => setNewsShown(false)} />}
+          {data.reminders.length === 0 && data.events.length === 0 && !newsShown && (
             <div className="notif-empty">{tx("All quiet — nothing due, nothing moved.")}</div>
           )}
           {data.reminders.map((r) => (

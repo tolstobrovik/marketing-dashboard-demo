@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, AlertCircle, Trash2, Eye, EyeOff, KeyRound, UserRound, Type, Clock, Send, BookOpen, Plus } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { Camera, Check, AlertCircle, Trash2, Eye, EyeOff, KeyRound, UserRound, Type, Clock, Send, BookOpen, Plus, Wallet, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import Fold from '../components/Fold.jsx'
 import Avatar from '../components/Avatar.jsx'
 import CalendarSync from '../components/CalendarSync.jsx'
+import ClaudeAccess from '../components/ClaudeAccess.jsx'
+import MyPay from '../components/MyPay.jsx'
+import DeliveryReport from '../components/DeliveryReport.jsx'
+import KpiDocument from '../components/KpiDocument.jsx'
+import { usePages } from '../lib/pages.jsx'
 import { WORK_DAYS } from '../lib/constants.js'
 import { TEXT_SIZES, getTextSize, applyTextSize } from '../lib/textSize.js'
 import { THEMES, getTheme, applyTheme } from '../lib/theme.js'
@@ -19,6 +25,15 @@ const SWATCHES = ['#A22036', '#2a78d6', '#1D9E75', '#BA7517', '#7b5ad6', '#0e8f8
 
 export default function Profile() {
   const { user, setUser } = useAuth()
+  // My pay (N-02): the Payment page, under the person it is about. /docs
+  // lands on /profile#pay, and the hash brings the section into view.
+  const { shows } = usePages()
+  const { hash } = useLocation()
+  const payHere = shows('docs')
+  const runsEverything = user.role === 'admin' && !(user.admin_channels || []).length
+  useEffect(() => {
+    if (hash === '#pay') requestAnimationFrame(() => document.getElementById('pay')?.scrollIntoView({ block: 'start' }))
+  }, [hash])
   const [name, setName] = useState(user.name)
   const [color, setColor] = useState(user.color)
   const [avatar, setAvatar] = useState(user.avatar)
@@ -226,6 +241,28 @@ export default function Profile() {
       </div>
 
 
+      {/* What the month is worth so far, the deliveries it rests on and the
+          KPI document it is measured against — money first, the reference
+          under it. An admin finds the whole team's payroll under Numbers → Pay. */}
+      {payHere && (
+        <section id="pay" className="profile-pay" aria-label={tx('My pay')}>
+          <div className="section-head" style={{ marginTop: 22 }}><h2><Wallet size={16} style={{ verticalAlign: -2 }} /> {tx('My pay')}</h2></div>
+          <MyPay startOpen />
+          <DeliveryReport />
+          {runsEverything && (
+            <Link className="card card-pad pay-jump" to="/numbers?tab=pay">
+              <Wallet size={17} />
+              <span>
+                <b>{tx('The whole team’s payroll')}</b>
+                <span className="stat-sub">{tx('Everybody’s month, the rates behind it, and recording it as paid')}</span>
+              </span>
+              <ChevronRight size={16} />
+            </Link>
+          )}
+          <KpiDocument />
+        </section>
+      )}
+
       <div className="section-head" style={{ marginTop: 22 }}><h2><Clock size={16} style={{ verticalAlign: -2 }} /> {tx('My working hours')}</h2></div>
       <div className="card card-pad">
         {schedErr && <div className="form-error"><AlertCircle size={16} /> {schedErr}</div>}
@@ -302,7 +339,7 @@ export default function Profile() {
         ) : tg.linked ? (
           <>
             <div className="stat-sub" style={{ marginBottom: 10 }}>
-              <Check size={14} style={{ verticalAlign: -2, color: 'var(--ok, #1D9E75)' }} /> {tg.bot ? tx('Connected to @{bot} — status moves, comments and deadline reminders land in Telegram too.', { bot: tg.bot }) : tx('Connected — status moves, comments and deadline reminders land in Telegram too.')}
+              <Check size={14} style={{ verticalAlign: -2, color: 'var(--ok, #1D9E75)' }} /> {tg.bot ? tx('Connected to @{bot} — new work, pravkas, work to review and @-mentions land in Telegram, with buttons to answer there.', { bot: tg.bot }) : tx('Connected — new work, pravkas, work to review and @-mentions land in Telegram, with buttons to answer there.')}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button className="btn btn-sm" onClick={tgTest} disabled={tgBusy}>{tx('Send a test')}</button>
@@ -312,7 +349,7 @@ export default function Profile() {
         ) : (
           <>
             <div className="stat-sub" style={{ marginBottom: 10 }}>
-              {tx('The bell, mirrored to your pocket: status moves, comments and deadline reminders arrive in Telegram.')}
+              {tx('Only what you have to act on: new work, a pravka, work to review, an @-mention. Quiet from 23:00 to 08:00.')}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button className="btn btn-primary" onClick={tgConnect} disabled={tgBusy}><Send size={14} /> {tx('Connect Telegram')}</button>
@@ -332,6 +369,8 @@ export default function Profile() {
         )}
         {tgMsg && <div className="stat-sub" style={{ marginTop: 8 }}>{tgMsg}</div>}
       </div>
+
+      {user.role !== 'ambassador' && <ClaudeAccess />}
 
       {user.role !== 'ambassador' && <CalendarSync />}
 

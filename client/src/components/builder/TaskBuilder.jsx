@@ -11,11 +11,13 @@ import { hasSubstance, isSentence, URL_RE } from '../../lib/text.js'
 import { toast } from '../../lib/toast.js'
 import { getPicks, bumpPick } from '../../lib/picks.js'
 import { isPicture, readPicture, readDocument } from '../../lib/picture.js'
+import { PALETTE, colorStyle } from '../../lib/pieceColor.js'
 import { tr as tx } from '../../lib/i18n.jsx'
 import StepWhere from './StepWhere.jsx'
 import StepTitle from './StepTitle.jsx'
 import StepPlan from './StepPlan.jsx'
 import StepMore from './StepMore.jsx'
+import { dayShort, firstName } from '../CoachParts.jsx'
 
 // ---- giving a task, one question at a time ----------------------------------
 //
@@ -49,6 +51,15 @@ import StepMore from './StepMore.jsx'
 //
 // It writes exactly what the sheet wrote for a new idea — same route, same
 // stage, same checks on the server — so the two can never disagree.
+//
+// T-01 (23 Oct 2026): it is also the form for Edit. Given a piece (`edit`), it
+// loads that piece's answers, opens at the step that was pressed (`startAt`:
+// a plan row's, else Idea) and has no Where step — the channel is the piece's.
+// On a desk the steps stand as a left column, each with its answer in grey;
+// on a phone the dots, one step a screen. Save writes the steps that were
+// changed, as one PATCH of their fields and nothing else — a person editing
+// a shoot time does not re-walk the brief. The full sheet waits behind "All
+// fields" (until T-05).
 
 // What a kind of work looks like in the form: the colour it wears (the same
 // token its chip wears everywhere — a post's chip is ruby), how far ahead it
@@ -66,14 +77,27 @@ const BRIEF = {
 }
 
 // Which step a refusal about a seat (or the day) belongs to.
-const SEAT_STEP = { operator_id: 'plan', editor_id: 'plan', designer_id: 'plan', release_date: 'plan' }
+const SEAT_STEP = { operator_id: 'plan', editor_id: 'plan', designer_id: 'plan', release_date: 'plan', recording_date: 'plan', edit_ready_date: 'plan', design_ready_date: 'plan' }
+// What each step saves when the piece already exists (edit mode): one PATCH
+// of these fields, as payloadOf builds them, and nothing else.
+const STEP_FIELDS = {
+  idea: ['title', 'type', 'description'],
+  plan: ['release_date', 'recording_date', 'recording_time', 'recording_end', 'operator_id', 'face_ids', 'editor_id', 'edit_ready_date', 'designer_id', 'design_ready_date', 'assignee_ids'],
+  more: ['reference_text', 'script', 'tz', 'telegram_type', 'is_guiding'],
+}
+// Where Edit opens: the window's Edit button says nothing (Idea); a plan row
+// says its stop — the shoot, the edit, the artwork, the day out — all of
+// which are the Plan step now.
+const START = { idea: 'idea', title: 'idea', plan: 'plan', more: 'more' }
+const hh = (t) => String(t || '').slice(0, 5)
+const listOf = (v) => (Array.isArray(v) ? v : (() => { try { return JSON.parse(v || '[]') } catch { return [] } })())
 const DRAFT_DAYS = 7
 const LAST_KEY = 'satashkent_builder_last'
 
 const readJSON = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null') } catch { return null } }
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* private window */ } }
 
-export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate, onFull }) {
+export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate, onFull, edit: editTask = null, startAt = '', onSaved = null }) {
   const { user } = useAuth()
   const { visible, byKey } = useChannels()
   const isAdmin = user.role === 'admin'
@@ -90,9 +114,10 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // campaign — says so in `defaults`, and then an old unfinished draft is not
   // brought back over the top of it.
   const DRAFT = `satashkent_builder_${user.id}`
-  const pageSaid = !!(defaults.release_date || defaults.recording_date || defaults.campaign_id || defaults.assignee_id || defaults.title
+  const pageSaid = !!editTask || !!(defaults.release_date || defaults.recording_date || defaults.campaign_id || defaults.assignee_id || defaults.title
     || defaults.type || defaults.status_id || defaults.design || defaults.designer_id)
   const [saved] = useState(() => {
+    if (editTask) return null   // a piece being edited is its own draft
     const d = readJSON(DRAFT)
     // …and only one left on the channel this page opened on: a reel drafted on
     // Instagram came back on Telegram, as a reel, with the Kind step hidden (the
@@ -109,7 +134,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // artwork are offered (Telegram and X posts are typed).
   const pickable = defaults.design ? visible.filter((c) => !['text', 'short', 'repost'].includes(c.format)) : visible
   const canUse = (k) => pickable.some((c) => c.key === k)
-  const startChannel = [defaults.channels?.[0], saved?.channel, last.channel, visible.length === 1 ? visible[0].key : '']
+  const startChannel = editTask?.channels?.[0] || [defaults.channels?.[0], saved?.channel, last.channel, visible.length === 1 ? visible[0].key : '']
     .find((k) => k && canUse(k)) || pickable[0]?.key || ''
   // A written channel gets posts — 48 of the last 49 — whatever was picked
   // on it last; anywhere else, what this person last gave on that channel.
@@ -123,7 +148,16 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
 
   const carried = Object.fromEntries(Object.entries(defaults).filter(([, v]) => v != null && v !== ''))
   const shot = defaults.recording_date ? defaults : { ...(saved || {}), ...carried }
-  const [d, setD] = useState(() => ({
+  const [d, setD] = useState(() => (editTask ? {
+    // Edit: the piece as the server has it now, in the form's own shape.
+    title: editTask.title || '', channel: editTask.channels?.[0] || '', type: editTask.type || 'reel', release_date: editTask.release_date || '',
+    recording_date: editTask.recording_date || '', recording_time: hh(editTask.recording_time), recording_end: hh(editTask.recording_end),
+    operator_id: editTask.operator_id ?? null, editor_id: editTask.editor_id ?? null, designer_id: editTask.designer_id ?? null,
+    design_ready_date: editTask.design_ready_date || '', face_ids: listOf(editTask.faces).map(Number).filter(Boolean),
+    owner_id: (editTask.assignees?.length ? Number(editTask.assignees[0]) : editTask.assignee_id) || user.id,
+    edit_ready_date: editTask.edit_ready_date || '', reference: editTask.reference_text || '', script: editTask.script || '', tz: editTask.tz || '',
+    notes: editTask.description || '', telegram_type: editTask.telegram_type || '', is_guiding: !!editTask.is_guiding, color: editTask.color ?? null,
+  } : {
     title: saved?.title || defaults.title || '',
     channel: startChannel,
     type: defaults.type || saved?.type || kindFor(startChannel),
@@ -148,8 +182,14 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
     notes: defaults.description || saved?.notes || '',
     telegram_type: defaults.telegram_type || saved?.telegram_type || '',
     is_guiding: !!(saved?.is_guiding ?? defaults.is_guiding),
+    // The maker's colour (round 11), the last optional row of the Brief step (T-02).
+    color: saved?.color ?? null,
   }))
-  const set = (patch) => setD((cur) => ({ ...cur, ...patch }))
+  // Edit: which steps were changed since the piece was loaded — Save writes
+  // those (a change made on Plan and then Next pressed is not lost on Save).
+  const touched = useRef(new Set())
+  const stepKey = useRef('')
+  const set = (patch) => { if (editTask && stepKey.current) touched.current.add(stepKey.current); setD((cur) => ({ ...cur, ...patch })) }
   const [photos, setPhotos] = useState([])
   const [files, setFiles] = useState([])
   const [restored, setRestored] = useState(!!saved)
@@ -157,7 +197,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // click outside, a phone call — loses nothing. Pictures and files are not
   // kept: they are megabytes, and the words are what hurts to lose.
   useEffect(() => {
-    if (!d.title.trim()) return
+    if (editTask || !d.title.trim()) return
     writeJSON(DRAFT, { ...d, at: Date.now() })
   }, [d]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -195,10 +235,10 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // A written channel opened from its own page has nothing to ask on the
   // Kind step — it is a post — so the step is not drawn. Neither is it for a
   // design given from the Design board on a known channel.
-  const givenOk = !!defaults.channels?.[0] && canUse(defaults.channels[0])
+  const givenOk = !!editTask || (!!defaults.channels?.[0] && canUse(defaults.channels[0]))
   const skipKind = (format === 'text' || !!defaults.design) && givenOk
   // Where is asked only when the page did not say and there is a choice.
-  const askWhere = !givenOk && pickable.length > 1
+  const askWhere = !editTask && !givenOk && pickable.length > 1
   // Plan: the days and the seats this kind has on this channel, on one line —
   // and, for an admin, whose task it is, which every kind has.
   const steps = useMemo(() => [
@@ -217,6 +257,8 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   const goTo = (k) => { const i = steps.findIndex((x) => x.key === k); go(i < 0 ? steps.length - 1 : i) }
   const next = () => go(step + 1)
   const back = () => go(step - 1)
+  // Edit opens at the step that was pressed.
+  useEffect(() => { if (editTask && startAt) goTo(START[startAt] || 'plan') }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // Going to a written (Telegram) channel: the item type is owed up front —
   // it is what the copywriter is paid by — with the guiding switch under it.
   const written = asked.formats.includes('text')
@@ -339,6 +381,9 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
       // moves an idea; a task added in a column stays in it.)
       auto_stage: true,
       release_date: bornDay(),
+      // …and whether that day was the person's or this page's: a born day
+      // follows a later shoot or edit day on the server; a chosen one stays.
+      release_born: !d.release_date,
       recording_date: d.recording_date || null,
       // The hours were picked on somebody's day. With nobody filming any more
       // they are nobody's hours, and are not sent — the day stays.
@@ -371,6 +416,51 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // other question waits for Edit.
   const draftOf = () => ({ ...payloadOf(), auto_stage: false,
     edit_ready_date: d.edit_ready_date || null, design_ready_date: d.design_ready_date || null })
+
+  // ---- edit mode: the steps changed, one PATCH ----
+  // The fields of the step being saved and of any other step changed on the
+  // way, as payloadOf builds them (the same shape the sheet saves) and nothing
+  // else; the colour is the piece's own row. A clash is the server's 409,
+  // settled in the same window a new task settles it in.
+  const stepBody = (k) => {
+    const p = payloadOf()
+    const fields = [...new Set([...touched.current, k].flatMap((s) => STEP_FIELDS[s] || []))]
+    const body = Object.fromEntries(fields.filter((f) => f in p).map((f) => [f, p[f]]))
+    if (!isAdmin) delete body.assignee_ids
+    return body
+  }
+  const saveStep = async (k, close = true, force = false) => {
+    if (!editTask || busy) return
+    if (!d.title.trim()) { go(ideaAt); setErr(tx('A name is needed')); return }
+    setBusy(true); setErr(''); setClash(null)
+    try {
+      let u = await api.patch(`/content/${editTask.id}`, { ...stepBody(k), ...(force ? { force: true } : {}) })
+      if ((d.color ?? null) !== (editTask.color ?? null)) u = await api.post(`/content/${editTask.id}/color`, { color: d.color }).catch(() => u)
+      touched.current.clear()
+      toast(tx('Saved — everyone on it sees the change'))
+      onSaved?.(u)
+      if (close) onClose()
+    } catch (e) {
+      if (e.status === 409 && e.data?.conflicts) { setClash({ ...e.data, step: k }); goTo('plan'); return }
+      if (e.data?.crew_field) goTo(SEAT_STEP[e.data.crew_field])
+      else if (SEAT_STEP[e.data?.field]) goTo(SEAT_STEP[e.data.field])
+      setErr(e.message)
+    } finally { setBusy(false) }
+  }
+  // What each step holds, said in the left column (a desk) in grey.
+  const nameOf = (id) => firstName(team.find((u) => u.id === id)) || ''
+  const dayOf = (iso, time = '') => (iso ? `${dayShort(iso)}${time ? `, ${hh(time)}` : ''}` : '')
+  const answerOf = (k) => {
+    if (k === 'idea') return d.title.trim()
+    if (k === 'plan') return [
+      film && [tx('Shoot'), [nameOf(d.operator_id), dayOf(d.recording_date, d.recording_time)].filter(Boolean).join(', ')],
+      edit && [tx('Editing'), [nameOf(d.editor_id), dayOf(cutDay)].filter(Boolean).join(', ')],
+      design && [tx('Artwork'), [nameOf(d.designer_id), dayOf(artDay)].filter(Boolean).join(', ')],
+      [tx('Out'), dayOf(d.release_date)],
+    ].filter((x) => x && x[1]).map(([a, b]) => `${a}: ${b}`).join(' · ')
+    if (k === 'more') return [d.reference.trim() && tx('Reference'), d.script.trim() && tx('Script'), d.tz.trim() && 'ТЗ'].filter(Boolean).join(', ')
+    return ''
+  }
   const submit = async (force = false, draft = false) => {
     if (!d.channel) { setErr(tx('Pick where it goes')); go(0); return }
     if (!d.title.trim()) { go(ideaAt); return }
@@ -389,6 +479,8 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
     const payload = { ...(draft ? draftOf() : payloadOf()), ...(force ? { force: true } : {}) }
     try {
       const created = await onCreate(payload)
+      // The colour is the piece's own row (POST …/color), written once there is a piece.
+      if (d.color != null && created?.id) await api.post(`/content/${created.id}/color`, { color: d.color }).catch(() => {})
       // Files hang on a task, so they go up once there is one to hang on.
       if (files.length && created?.id) {
         for (const f of files) {
@@ -420,7 +512,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   // Nothing attached is lost to a stray Esc or a click beside the form: the
   // words are kept in this browser, the pictures and files are not.
   const leave = () => {
-    if ((photos.length || files.length) && !window.confirm(tx('Leave without saving what you entered?'))) return
+    if ((photos.length || files.length || (editTask && touched.current.size)) && !window.confirm(tx('Leave without saving what you entered?'))) return
     onClose()
   }
 
@@ -449,20 +541,38 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
       title: '', channel: startChannel, type: kindFor(startChannel), release_date: '', recording_date: '', recording_time: '', recording_end: '',
       operator_id: null, editor_id: null, designer_id: null, design_ready_date: '', face_ids: [],
       owner_id: user.id, edit_ready_date: '', reference: '', script: '', tz: '', notes: '',
-      telegram_type: '', is_guiding: false,
+      telegram_type: '', is_guiding: false, color: null,
     })
     setPhotos([]); setFiles([]); setRestored(false); setErr(''); setDir('back'); setStep(0)
   }
 
   // Ctrl/⌘+Enter makes it from anywhere; plain Enter belongs to each step.
   const onKey = (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (canCreate) submit() }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (editTask) saveStep(key); else if (canCreate) submit() }
   }
 
   const at = Math.min(step, steps.length - 1)
   const key = steps[at].key
+  stepKey.current = key
   const isLast = at === steps.length - 1
-  const footer = (
+  const footer = editTask ? (
+    <>
+      {step > 0 && (
+        <button type="button" className="btn btn-ghost tb-back" onClick={back} aria-label={tx('Back')}>
+          <ArrowLeft size={15} /> <span className="tb-back-word">{tx('Back')}</span>
+        </button>
+      )}
+      <span className="foot-gap" />
+      {!isLast && (
+        <button type="button" className="btn tb-now" disabled={busy} onClick={next}>
+          {tx('Next: {step}', { step: tx(steps[at + 1].label) })} <ArrowRight size={15} />
+        </button>
+      )}
+      <button type="button" className="btn btn-primary tb-go" disabled={busy || !d.title.trim()} onClick={() => saveStep(key)}>
+        <Check size={15} /> {busy ? tx('Saving…') : tx('Save')}
+      </button>
+    </>
+  ) : (
     <>
       {step > 0 && (
         <button type="button" className="btn btn-ghost tb-back" onClick={back} aria-label={tx('Back')}>
@@ -488,10 +598,10 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
   )
 
   return (
-    <Modal onClose={leave} footer={footer} bodyClass="tb-body"
+    <Modal onClose={leave} footer={footer} bodyClass={'tb-body' + (editTask ? ' tb-body-edit' : '')} wide={!!editTask}
       title={(
         <span className="tb-head" style={{ '--tb-accent': ACCENT[d.type] || 'var(--ruby)' }}>
-          {tx('New task')}
+          {editTask ? tx('Edit the task') : tx('New task')}
           <span className="tb-head-what">
             {(() => { const I = typeInfo(d.type).icon; return I ? <I size={13} /> : null })()}
             {tx(defaults.design ? 'Design' : typeInfo(d.type).label)}
@@ -499,7 +609,19 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
           </span>
         </span>
       )}>
-      <div className="tb" onKeyDown={onKey} onPaste={onPaste} style={{ '--tb-accent': ACCENT[d.type] || 'var(--ruby)' }}>
+      <div className={'tb' + (editTask ? ' tb-edit' : '')} onKeyDown={onKey} onPaste={onPaste} style={{ '--tb-accent': ACCENT[d.type] || 'var(--ruby)' }}>
+        {/* Edit on a desk: the steps as a column, each with its answer. */}
+        {editTask && (
+          <ol className="tb-side" aria-label={tx('Steps')}>
+            {steps.map((s, i) => (
+              <li key={s.key}>
+                <button type="button" className={'tb-side-b' + (i === at ? ' on' : '')} aria-current={i === at ? 'step' : undefined} onClick={() => go(i)}>
+                  <b>{tx(s.label)}</b><small>{answerOf(s.key) || tx('Not yet')}</small>
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
         <div className="tb-top">
           <ol className="tb-progress" aria-label={tx('Steps')}>
             {steps.map((s, i) => (
@@ -513,7 +635,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
               </li>
             ))}
           </ol>
-          <button type="button" className="tb-all" onClick={openFull} disabled={!d.title.trim()}
+          <button type="button" className="tb-all" onClick={editTask ? () => onFull?.() : openFull} disabled={!d.title.trim() || (!!editTask && !onFull)}
             data-tip={tx('Script, ТЗ, shoot hour and the rest')}>
             <SlidersHorizontal size={13} /> {tx('All fields')}
           </button>
@@ -547,10 +669,11 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
                 operators={operators} editors={editors} designers={designers} people={people} owners={owners} />
             )}
             {key === 'more' && (
-              <StepMore brief={d} onBrief={set} booking={booking} ask={brief.ask ? tx(brief.ask) : ''} sub={brief.sub ? tx(brief.sub) : ''}
+              <StepMore brief={d} onBrief={set} booking={editTask ? '' : booking} ask={brief.ask ? tx(brief.ask) : ''} sub={brief.sub ? tx(brief.sub) : ''}
                 telegram={written ? { type: d.telegram_type, guiding: d.is_guiding, missing: !!err && !d.telegram_type } : null}
-                show={{ reference: fOn('reference'), script: fOn('script'), tz: fOn('tz') }}
-                photos={photos} files={files} onAdd={addFiles}
+                show={{ reference: fOn('reference'), script: fOn('script'), tz: fOn('tz') }} loading={!rules}
+                colour={(user.color_mode || 'own') === 'own' ? { value: d.color, onChange: (c) => set({ color: c }), palette: PALETTE, style: colorStyle } : null}
+                photos={photos} files={files} onAdd={addFiles} noFiles={!!editTask}
                 onRemovePhoto={(i) => setPhotos((cur) => cur.filter((_, j) => j !== i))}
                 onRemoveFile={(i) => setFiles((cur) => cur.filter((_, j) => j !== i))}
                 onSubmit={() => submit()} />
@@ -562,7 +685,7 @@ export default function TaskBuilder({ statuses, defaults = {}, onClose, onCreate
             sheet uses. The builder is already back on the step with the
             person's day by the time it opens (goTo('shoot') in submit). */}
         {clash && (
-          <ClashDialog clash={clash} busy={busy} onBack={() => setClash(null)} onForce={() => submit(true, !!clash?.draft)} />
+          <ClashDialog clash={clash} busy={busy} onBack={() => setClash(null)} onForce={() => (clash?.step ? saveStep(clash.step, true, true) : submit(true, !!clash?.draft))} />
         )}
       </div>
     </Modal>

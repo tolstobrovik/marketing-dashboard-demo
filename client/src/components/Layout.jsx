@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import GetSetUp from './GetSetUp.jsx'
-import { FileQuestion, Menu, Plus, LogOut, Sun, Home, BarChart3, ScrollText, Coins, PanelLeftClose, PanelLeftOpen, Search, Palette, ShieldAlert, Timer, LayoutGrid, User, RefreshCw, Clapperboard, Briefcase, GraduationCap, Megaphone, X, CalendarRange, ClipboardList, UploadCloud } from 'lucide-react'
+import { FileQuestion, Menu, Plus, LogOut, Sun, Home, BarChart3, ScrollText, Coins, PanelLeftClose, PanelLeftOpen, Search, Palette, ShieldAlert, LayoutGrid, User, RefreshCw, Clapperboard, Briefcase, GraduationCap, Megaphone, X, CalendarRange, ClipboardList, UploadCloud } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
 import MobileTabs, { MoreSheet } from './MobileTabs.jsx'
 import NewTask from './NewTask.jsx'
@@ -206,14 +206,12 @@ export default function Layout() {
   // it, in whichever language they called it.
   let title = ''
   if (location.pathname.startsWith('/admin')) title = t('nav.adminpanel')
-  else if (location.pathname.startsWith('/overview')) title = t('nav.overview')
+  else if (location.pathname.startsWith('/brief/calendar')) title = t('nav.releases')
   else if (location.pathname.startsWith('/brief')) title = t('nav.brief')
   else if (location.pathname.startsWith('/calendar') || location.pathname.startsWith('/releases')) title = t('nav.releases')
   else if (location.pathname.startsWith('/recordings')) title = t('nav.recordings')
-  else if (location.pathname.startsWith('/missed')) title = t('nav.stats')
-  else if (location.pathname.startsWith('/crew')) title = t('nav.crew')
-  else if (location.pathname.startsWith('/team')) title = t('nav.team')
-  else if (location.pathname.startsWith('/docs')) title = t('nav.docs')
+  else if (location.pathname.startsWith('/numbers') || location.pathname.startsWith('/missed')) title = tx('Numbers')
+  else if (location.pathname.startsWith('/team') || location.pathname.startsWith('/crew')) title = t('nav.team')
   else if (location.pathname.startsWith('/sprints')) title = t('nav.sprints')
   else if (location.pathname.startsWith('/design')) title = t('nav.design')
   else if (location.pathname.startsWith('/uploads')) title = tx('Uploads')
@@ -256,13 +254,12 @@ export default function Layout() {
   // cannot hold a page an admin switched off — so they are taken from what is
   // still there, in the order they matter, and the rest fall into More.
   const CANDIDATES = [
+    // Shooting is a button inside the one calendar frame (round 15, N-01), not a slot.
     { key: 'releases', to: '/calendar', label: tx('Calendar'), icon: CalendarRange },
-    { key: 'recordings', to: '/recordings', label: t('nav.recordings'), icon: Clapperboard },
     ...(driveOn ? [{ key: 'uploads', to: '/uploads', label: tx('Uploads'), icon: UploadCloud }] : []),
-    { key: 'missed', to: '/missed', label: t('nav.stats'), icon: BarChart3 },
+    // Numbers (N-02) stands under the Statistics switch; a member's pay is in their profile.
+    { key: 'missed', to: '/numbers', label: tx('Numbers'), icon: BarChart3 },
     { key: 'design', to: '/design', label: t('nav.design'), icon: Palette },
-    { key: 'docs', to: '/docs', label: t('nav.docs'), icon: Coins },
-    { key: 'sprints', to: '/sprints', label: t('nav.sprints'), icon: Timer },
     { key: 'projects', to: '/projects', label: t('nav.projects'), icon: Briefcase },
   ].filter((c) => shows(c.key))
   // The crew's two slots follow their craft. "In the order they matter" was the
@@ -279,7 +276,7 @@ export default function Layout() {
   // More.
   const crewCaps = ['editor', 'operator', 'designer', 'crew'].includes(user.role) ? (user.crew_roles || []) : null
   if (crewCaps) {
-    const first = [crewCaps.includes('editor') && 'uploads', crewCaps.includes('operator') && 'recordings', crewCaps.includes('designer') && 'design', 'uploads', 'docs', 'recordings']
+    const first = [crewCaps.includes('editor') && 'uploads', crewCaps.includes('operator') && 'releases', crewCaps.includes('designer') && 'design', 'uploads']
       .filter(Boolean)
     const rank = (c) => { const i = first.indexOf(c.key); return i < 0 ? 100 : i }
     CANDIDATES.sort((a, b) => rank(a) - rank(b))
@@ -398,8 +395,8 @@ export default function Layout() {
               </NavLink>
             )}
             {shows('missed') && (
-              <NavLink to="/missed" className={({ isActive }) => 'solo-link' + (isActive ? ' active' : '')}>
-                <BarChart3 size={16} /> {t('nav.stats')}
+              <NavLink to="/numbers" className={({ isActive }) => 'solo-link' + (isActive ? ' active' : '')}>
+                <BarChart3 size={16} /> {tx('Numbers')}
               </NavLink>
             )}
             {shows('design') && (
@@ -407,21 +404,7 @@ export default function Layout() {
                 <Palette size={16} /> {t('nav.design')}
               </NavLink>
             )}
-            {shows('docs') && (
-              <NavLink to="/docs" className={({ isActive }) => 'solo-link' + (isActive ? ' active' : '')}>
-                <Coins size={16} /> {t('nav.docs')}
-              </NavLink>
-            )}
-            {/* Sprints is for the whole team, whatever hats they wear. It was in
-                the sidebar and ungated there, but somebody with no channels
-                gets this bar instead of a sidebar, so for them it did not exist
-                at all. The page itself always let them in; only the door was
-                missing. */}
-            {shows('sprints') && (
-              <NavLink to="/sprints" className={({ isActive }) => 'solo-link' + (isActive ? ' active' : '')}>
-                <Timer size={16} /> {t('nav.sprints')}
-              </NavLink>
-            )}
+            {/* Sprints is in no menu (B-08); it stays by its address until it retires. */}
             {/* And Projects, for the third time the same story — this one cost
                 somebody three projects they owned and could not open.
 
@@ -437,7 +420,7 @@ export default function Layout() {
                 <Briefcase size={16} /> {t('nav.projects')}
               </NavLink>
             )}
-            {/* Same story as Sprints, for the same reason: somebody who runs the
+            {/* Same story as Projects, for the same reason: somebody who runs the
                 ambassador programme and works on one channel gets this bar
                 instead of a sidebar, so a door that only exists in the sidebar
                 is a door they do not have — and the programme is their job, not
@@ -487,10 +470,8 @@ export default function Layout() {
   // is no longer a default slot — N-06; it stays a door in the sidebar.)
   const barPicks = [
     { key: 'releases', to: '/calendar', label: tx('Calendar'), icon: CalendarRange },
-    { key: 'recordings', to: '/recordings', label: t('nav.recordings'), icon: Clapperboard },
-    { key: 'missed', to: '/missed', label: t('nav.stats'), icon: BarChart3 },
+    { key: 'missed', to: '/numbers', label: tx('Numbers'), icon: BarChart3 },
     { key: 'design', to: '/design', label: t('nav.design'), icon: Palette },
-    { key: 'docs', to: '/docs', label: t('nav.docs'), icon: Coins },
   ].filter((c) => shows(c.key)).slice(0, 2)
   // The simple look, on a phone, for whoever runs channels: their day, their
   // first two channels and More — the same doors their sidebar keeps open.

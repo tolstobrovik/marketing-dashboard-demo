@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Check, ChevronDown, Upload } from 'lucide-react'
 import {
-  KIND, CrewBadge, Empty, WhatsNew, KindMark, ownOf, StartHere,
+  KIND, CrewBadge, Empty, KindMark, ownOf, StartHere,
   firstName, dayInLine, dayShort, hoursOf,
 } from './CoachParts.jsx'
 import { Capsule, tracks, Frame, DayChip } from './CoachBits.jsx'
@@ -334,8 +334,6 @@ export default function CoachCrewDay({
         <p className="co-date">{longDayLabel(today)}</p>
         <h1 className="co-title">{now ? tx('{name}, start here.', { name }) : tx('{name}, nothing to start right now.', { name })}</h1>
       </header>
-
-      <WhatsNew />
 
       {(now || films || sq.length > 0) && (
         <div className={'co-nn' + (now ? '' : ' solo')}>

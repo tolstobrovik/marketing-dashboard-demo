@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowRight, Check, Send, PenLine } from 'lucide-react'
 import {
-  KIND, MakerBadge, RemindButton, StartHere, More, WhatsNew,
+  KIND, MakerBadge, RemindButton, StartHere, More,
   firstName, dayInLine, dayShort, hoursOf, lateWords,
 } from './CoachParts.jsx'
 import Timeline, { timelineOf } from './Timeline.jsx'
@@ -136,7 +136,9 @@ export default function CoachMakerDay({
   }
   // The word on the button that opens the task on the maker's own step.
   const verbOf = (act) => (act.kind === 'publish' ? tx('Publish') : act.kind === 'move' ? tx(act.verb)
-    : act.kind === 'ownfix' || act.kind === 'fix' ? tx('Fix it') : act.kind === 'ask' ? tx('Answer') : tx('Open'))
+    : act.kind === 'ownfix' || act.kind === 'fix' ? tx('Fix it') : act.kind === 'ask' ? tx('Answer')
+      : act.kind === 'seat' ? (act.wait === 'shoot' ? tx('Name who films it') : act.wait === 'artwork' ? tx('Name who draws it') : tx('Name who edits it'))
+        : tx('Open'))
   const actionOf = (r) => {
     const { act, t } = r
     if (act.kind === 'check') {
@@ -233,8 +235,6 @@ export default function CoachMakerDay({
         <p className="co-date">{longDayLabel(today)}</p>
         <h1 className="co-title">{first ? tx('{name}, start here.', { name }) : tx('{name}, nothing waits for you right now.', { name })}</h1>
       </header>
-
-      <WhatsNew />
 
       {showHero && hero()}
       <section className="co-list" aria-label={tx('Your pieces, the most pressing first')}>

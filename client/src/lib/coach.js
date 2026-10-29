@@ -327,6 +327,11 @@ export function actOf(t, { userId, pipe, step = null, today, rounds = 0, maxRoun
     const wait = step.wait === 'artwork' && !t.designer_id && t.editor_id ? 'cut'
       : step.wait === 'cut' && !t.editor_id && t.designer_id ? 'artwork' : step.wait
     const who = wait === 'cut' ? t.editor_id : wait === 'artwork' ? t.designer_id : step.who
+    // A making stop with nobody in the seat is not "in somebody's hands": it
+    // is the maker's step — name the person (the role play, 24 Oct 2026: a
+    // reel sent to editing with no editor sat under "On its way" for days).
+    const seat = { shoot: 'operator_id', cut: 'editor_id', artwork: 'designer_id' }[wait]
+    if (seat && !who) return { kind: 'seat', wait, seat, didMine }
     return { kind: 'waiting', wait, holder: who || (wait === 'idea' || wait === 'review' ? ownersOf(t)[0] : null) || null, didMine }
   }
   return { kind: 'none', didMine }
@@ -341,7 +346,7 @@ const WAIT_KIND = { shoot: 'shoot', cut: 'edit', artwork: 'design', review: 'sen
 export const kindOfAct = (act) => (act.hat ? act.hat.kind
   : act.kind === 'check' ? (act.what === 'cut' ? 'edit' : 'design')
     : act.kind === 'fixing' || act.kind === 'ownfix' ? (KIND_OF[act.seat] || 'edit')
-      : act.kind === 'waiting' ? (WAIT_KIND[act.wait] || 'idea')
+      : act.kind === 'waiting' || act.kind === 'seat' ? (WAIT_KIND[act.wait] || 'idea')
         : act.kind === 'publish' ? 'send' : act.kind === 'out' ? 'out' : 'idea')
 
 // ---- the maker's day ---------------------------------------------------------------
@@ -365,12 +370,18 @@ export const kindOfAct = (act) => (act.hat ? act.hat.kind
 //   first  the first piece they can act on, in that order — the big card
 //   month  how many of this month's pieces are out
 const GROUPS = ['film', 'check', 'fix', 'late', 'move', 'ready', 'nodate', 'plan', 'out']
-const THEIRS = ['check', 'move', 'publish', 'ownfix', 'handin', 'ask', 'fix']
+const THEIRS = ['check', 'move', 'publish', 'ownfix', 'handin', 'ask', 'fix', 'seat']
 export function makerDay({ pieces, today, userId, pipe, stepOf, roundsOf = () => 0, maxRounds = 2, canReviewOf = () => false }) {
   const rows = []
   for (const t of pieces) {
     const at = pipe.live.findIndex((s) => s.id === t.status_id)
-    if (at < 0) continue
+    // Between stages, or on one the board no longer has: still the maker's
+    // piece, so it is on the page (under "No day yet") and can be opened and
+    // given a stage — dropped, it was on nobody's screen (24 Oct 2026).
+    if (at < 0) {
+      if (!t.done_at && !(pipe.dead || []).includes(t.status_id)) rows.push({ t, group: 'nodate', act: { kind: 'none' }, holder: null, late: 0, state: '', actionable: false, due: null })
+      continue
+    }
     if (t.done_at) { rows.push({ t, group: 'out', act: { kind: 'out' }, holder: null, late: 0, state: '', actionable: false, due: dayOf(t.done_at) }); continue }
     const label = pipe.live[at].label || ''
     const act = actOf(t, { userId, pipe, step: stepOf(t), today, rounds: roundsOf(t), maxRounds, canReview: canReviewOf(t) })
@@ -388,7 +399,7 @@ export function makerDay({ pieces, today, userId, pipe, stepOf, roundsOf = () =>
       : act.kind === 'check' ? 'check'
         : act.kind === 'fixing' ? 'fix'
           : late ? 'late'
-            : ['move', 'ownfix', 'handin', 'ask', 'fix'].includes(act.kind) ? 'move'
+            : ['move', 'ownfix', 'handin', 'ask', 'fix', 'seat'].includes(act.kind) ? 'move'
               : act.kind === 'publish' ? 'ready' : due ? 'plan' : 'nodate'
     // What the operator said, for a shoot today. On a piece still at Idea the
     // shoot is planned and not sent: that one is the maker's to send.
@@ -487,7 +498,9 @@ export function addLater(t, making, pipe) {
   if (!making?.filmed || t.done_at || !pipe || pipe.edit < 0) return []
   if (pipe.live.findIndex((s) => s.id === t.status_id) < pipe.edit) return []
   const reference = String(t.reference_text || '').trim() || t.reference_links?.length || t.has_photo || t.media_count || t.media?.length
-  return [!reference && 'reference_text', !t.release_date && 'release_date'].filter(Boolean)
+  // A release day the server gave (`release_born`) is not the day to post —
+  // it is still to be picked, the way the move into editing asks it.
+  return [!reference && 'reference_text', (!t.release_date || t.release_born) && 'release_date'].filter(Boolean)
 }
 
 // ---- the way of a task ----------------------------------------------------------------

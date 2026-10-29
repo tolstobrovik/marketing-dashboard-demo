@@ -19,6 +19,7 @@ import CoachCrewDay from '../components/CoachCrewDay.jsx'
 import CoachMakerDay from '../components/CoachMakerDay.jsx'
 import CoachAdminDay from '../components/CoachAdminDay.jsx'
 import CoachCalendar from '../components/CoachCalendar.jsx'
+import CalendarViews from '../components/CalendarViews.jsx'
 import { KindMark, ownOf, ownClass } from '../components/CoachParts.jsx'
 import { NETWORKS } from '../components/CoachBits.jsx'
 import { byNetwork, tailOf } from '../components/Sidebar.jsx'
@@ -488,6 +489,9 @@ export default function Brief({ calendar = false }) {
     }
     const id = setInterval(refresh, 10000)
     window.addEventListener('focus', refresh)
+    // The poll is paused while a task is open; the moment it closes, read once
+    // — what others did meanwhile should not wait up to ten seconds (24 Oct 2026).
+    if (!openItem) refresh()
     return () => { clearInterval(id); window.removeEventListener('focus', refresh) }
   }, [openItem])
 
@@ -1121,12 +1125,21 @@ export default function Brief({ calendar = false }) {
   )
   if (simple && calendar) {
     // r11: the crew's own calendar is a page, opened from the menu on the left.
+    // N-01: it is the Mine view of the one calendar frame (round 15), under
+    // the same strip as Shooting and Releasing; the top bar names the page.
     return (
       <>
         <div className="co">
-          <header className="co-head"><h1 className="co-title">{tx('Calendar')}</h1></header>
-          <p className="co-help cc-drag-help">{tx('Drag a piece to another day to move it.')}</p>
-          {crewCalendar}
+          <div className="card sch-frame sch-mine">
+            <div className="sch-top">
+              <CalendarViews active="mine" />
+              <span className="sch-lead">{tx('Your own shoots, edits and artwork')}</span>
+            </div>
+            <div className="sch-mine-body">
+              <p className="co-help cc-drag-help">{tx('Drag a piece to another day to move it.')}</p>
+              {crewCalendar}
+            </div>
+          </div>
         </div>
         {movingBox}
         {modal}

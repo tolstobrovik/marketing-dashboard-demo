@@ -98,7 +98,10 @@ export function useChannelCounts(on = true) {
     read()
     timer = setInterval(read, COUNTS_EVERY)
     document.addEventListener('visibilitychange', read)
-    return () => { gone = true; stop() }
+    // A move made on this page: the badges read again at once (24 Oct 2026).
+    const wrote = () => { last = 0; read() }
+    window.addEventListener('satashkent:wrote', wrote)
+    return () => { gone = true; stop(); window.removeEventListener('satashkent:wrote', wrote) }
   }, [on])
   return counts
 }

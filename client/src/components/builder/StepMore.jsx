@@ -39,7 +39,7 @@ function Line({ label, value, onChange, placeholder, onSubmit, first }) {
 
 export default function StepMore({
   brief, onBrief, show, booking, telegram, ask, sub,
-  photos, files, onAdd, onRemovePhoto, onRemoveFile, onSubmit,
+  photos, files, onAdd, onRemovePhoto, onRemoveFile, onSubmit, loading = false, colour = null, noFiles = false,
 }) {
   const pick = useRef(null)
   const [over, setOver] = useState(false)
@@ -60,13 +60,18 @@ export default function StepMore({
         <TelegramFields type={telegram.type} guiding={telegram.guiding} required bad={telegram.missing}
           onType={(v) => onBrief({ telegram_type: v || '' })} onGuiding={(v) => onBrief({ is_guiding: v })} />
       )}
-      <div className="tb-brief">
-        {lines.map(([k, label, ph], i) => (
+      {/* T-02: never blank — the lines stand as skeletons until the field
+          rules say which of them this kind of work has. */}
+      <div className="tb-brief" aria-busy={loading || undefined}>
+        {loading && [0, 1, 2].map((i) => <span key={i} className="tb-line tb-skel" aria-hidden="true"><span className="tb-skel-bar" /></span>)}
+        {!loading && lines.map(([k, label, ph], i) => (
           <Line key={k} label={label} value={brief[k]} placeholder={ph} first={i === 0}
             onSubmit={onSubmit}
             onChange={(v) => onBrief({ [k]: v })} />
         ))}
       </div>
+      {/* Editing: the piece's files are the window's own blocks, not asked again here. */}
+      {!noFiles && (
       <div className={'tb-drop' + (over ? ' over' : '')} role="button" tabIndex={0}
         onClick={() => pick.current?.click()}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick.current?.click() } }}
@@ -78,7 +83,8 @@ export default function StepMore({
         <span>{tx('Drop them here, tap to choose, or paste a screenshot')}</span>
         <input ref={pick} type="file" multiple hidden onChange={(e) => { take(e.target.files); e.target.value = '' }} />
       </div>
-      {(photos.length > 0 || files.length > 0) && (
+      )}
+      {!noFiles && (photos.length > 0 || files.length > 0) && (
         <div className="tb-files">
           {photos.map((p, i) => (
             <span key={`p${i}`} className="tb-thumb">
@@ -92,6 +98,19 @@ export default function StepMore({
               <button type="button" className="tb-file-x" onClick={() => onRemoveFile(i)} aria-label={tx('Remove')}><X size={12} /></button>
             </span>
           ))}
+        </div>
+      )}
+      {/* The maker's colour (round 11's own palette), the last row and
+          optional: the piece wears it on the calendars and the board. */}
+      {colour && (
+        <div className="tb-colour">
+          <span className="tb-faces-label">{tx('Colour')} <span className="crew-opt">{tx('optional')}</span></span>
+          <span className="pc-filter" role="group" aria-label={tx('Colour')}>
+            {[...Array(colour.palette)].map((_, i) => (
+              <button key={i} type="button" className="pc-swatch" style={colour.style(i)} aria-pressed={colour.value === i}
+                aria-label={tx('Colour {n}', { n: i + 1 })} onClick={() => colour.onChange(colour.value === i ? null : i)} />
+            ))}
+          </span>
         </div>
       )}
     </div>

@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanZoom } from './Zoom.jsx'
-import { Scissors, Palette, Clapperboard, ExternalLink, Check, FolderOpen, FileText, Clock, UploadCloud, X, Send, Play, Trash2 } from 'lucide-react'
-import { FullScreen, removeDriveFile } from './DriveFiles.jsx'
+import { Scissors, Palette, Clapperboard, ExternalLink, Check, FolderOpen, FileText, Clock, UploadCloud, X, Send, Play, Trash2, RotateCcw } from 'lucide-react'
+import { FullScreen, removeDriveFile, onDriveFilesChanged } from './DriveFiles.jsx'
 import Modal from './Modal.jsx'
 import PravkaNote from './PravkaNote.jsx'
+import PravkaList from './PravkaList.jsx'
 import { api } from '../lib/api.js'
 import { useChannels } from '../lib/channels.jsx'
 import { deliveryHref } from '../lib/text.js'
 import { toast } from '../lib/toast.js'
 import { rewardFinish } from '../lib/reward.js'
 import { tr as tx } from '../lib/i18n.jsx'
-import { startUpload, cancelUpload, useUploads, sizeLabel } from '../lib/uploads.js'
+import { startUpload, cancelUpload, retryUpload, useUploads, sizeLabel } from '../lib/uploads.js'
 import { editDue, reviewDue } from '../lib/due.js'
 import { todayISO, tashkentDay } from '../lib/constants.js'
 
@@ -118,7 +119,7 @@ export default function HandIn({ item, kind, onDone, onClose, onOpenFull, inline
   const jobOf = (f) => jobs.find((j) => j.key === f.key) || null
   const sending = files.some((f) => jobOf(f)?.state === 'sending')
   const failed = files.find((f) => jobOf(f)?.state === 'failed')
-  useEffect(() => { if (failed) setErr(jobOf(failed).error) }, [failed?.key]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setErr(failed ? tx(jobOf(failed).error || 'Did not upload') : '') }, [failed?.key]) // eslint-disable-line react-hooks/exhaustive-deps
   const send = (list) => {
     const chosen = [...(list || [])].filter(Boolean)
     if (!chosen.length || busy) return
@@ -132,8 +133,39 @@ export default function HandIn({ item, kind, onDone, onClose, onOpenFull, inline
         onDone: (out) => { if (alive.current) setValue((v) => v || out.link) },
       }),
     }))
-    setFiles((old) => [...old, ...added])
+    // The same file dropped twice is one upload (lib/uploads.js hands back the
+    // key it already has): one row here too, and the second preview let go.
+    setFiles((old) => {
+      const fresh = added.filter((a, i) => !old.some((f) => f.key === a.key) && added.findIndex((b) => b.key === a.key) === i)
+      added.filter((a) => !fresh.includes(a)).forEach((a) => a.url && URL.revokeObjectURL(a.url))
+      return [...old, ...fresh]
+    })
   }
+  // ---- or hand in what is already on the task's Drive ----
+  // A file that came in through the Drive folders (drop-in), or an upload whose
+  // window was closed before it landed, is on the task but in no box here — and
+  // the box, with Drive on, has no link field. So the task's Drive files for
+  // this seat are listed, each with "Use this one" (24 Oct 2026). Footage for
+  // the shoot; the final file or a fix for the edit and the artwork; the task's
+  // own uploads for any of them. The server still says what a hand-in needs.
+  const [onDrive, setOnDrive] = useState([])
+  const [picked, setPicked] = useState(null)
+  const seatFile = (f) => {
+    if (f.state !== 'ok' || (f.source !== 'drop' && f.source !== 'upload')) return false
+    if (f.source === 'drop' && (kind === 'shoot' ? f.kind !== 'footage' : f.kind === 'footage')) return false
+    return kind === 'design' ? !/^video\//.test(f.mime || '') : !/^image\//.test(f.mime || '')
+  }
+  useEffect(() => {
+    if (!drive) return undefined
+    let live = true
+    const load = () => api.get(`/drive/tasks/${item.id}/files`)
+      .then((r) => { if (live) setOnDrive((r.files || []).filter(seatFile)) })
+      .catch(() => { if (live) setOnDrive((item.drive_drops || []).filter((d) => seatFile({ ...d, id: d.file_id, state: 'ok', source: 'drop' })).map((d) => ({ ...d, id: d.file_id }))) })
+    load()
+    const off = onDriveFilesChanged(item.id, load)
+    return () => { live = false; off() }
+  }, [drive, item.id, kind]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [linkOpen, setLinkOpen] = useState(false)
   const gb = sizeLabel
   // Delete one: an uploaded file goes to the Drive's bin (asked first); one
   // that never landed just leaves the list. The box keeps the first link of
@@ -199,6 +231,7 @@ export default function HandIn({ item, kind, onDone, onClose, onOpenFull, inline
           <div className="hi-round">
             <b>{tx('{name} asked for changes', { name: (round.requested_name || '').split(' ')[0] || tx('The team') })}</b>
             <PravkaNote text={round.note} className="hi-round-note" />
+            <PravkaList taskId={item.id} round={round} canTick />
             <span className="stat-sub">{tx('Round {n} · to fix', { n: round.round })} · {tashkentDay(round.created_at)}</span>
           </div>
         )}
@@ -289,6 +322,10 @@ export default function HandIn({ item, kind, onDone, onClose, onOpenFull, inline
                         <span className="hi-prev-up">
                           {j?.state === 'done' ? <span className="hi-prev-ok"><Check size={13} aria-hidden="true" />{tx('On Drive')} · {gb(j.size)}</span>
                             : <span className="hi-prev-bad">{tx('Not sent')}</span>}
+                          {/* Failed: the same upload again, from where Google stopped (24 Oct 2026). */}
+                          {j?.state === 'failed' && j.file && (
+                            <button type="button" className="icon-btn" onClick={() => { setErr(''); retryUpload(f.key) }} aria-label={tx('Try again')} title={tx('Try again')}><RotateCcw size={14} /></button>
+                          )}
                           <button type="button" className="icon-btn hi-prev-del" onClick={() => drop(f)} disabled={busy} aria-label={tx('Delete')} title={tx('Delete')}><Trash2 size={14} /></button>
                         </span>
                       )}
@@ -322,8 +359,42 @@ export default function HandIn({ item, kind, onDone, onClose, onOpenFull, inline
             </label>
           )
           // Round 14: with the team's Drive connected the file is dropped, never
-          // linked (the owner, 16 Oct). A link box is only for a board without Drive.
-          return drive ? null : field
+          // linked (the owner, 16 Oct). A link box is only for a board without
+          // Drive — or, with Drive, behind "or paste a link" (24 Oct 2026: a
+          // file somebody else uploaded had no way in at all).
+          if (!drive) return field
+          const mine = jobs.some((j) => j.link && j.link === value)
+          const chosen = !!picked && value === picked.link
+          return (
+            <>
+              {!filled && onDrive.length > 0 && (
+                <div className="hi-field">
+                  <span className="hi-label">{tx('Already on the task’s Drive')}</span>
+                  {onDrive.map((f) => (
+                    <div key={f.id} className="hi-source">
+                      <FileText size={14} aria-hidden="true" />
+                      <span>{f.name}{f.size ? ` · ${gb(f.size)}` : ''}</span>
+                      <button type="button" className="btn btn-sm" onClick={() => { setPicked(f); setValue(f.link); setErr('') }}
+                        title={tx('After you press: this file is the one handed in when you press the button below')}>
+                        <Check size={13} aria-hidden="true" /> {tx('Use this one')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {chosen && (
+                <div className="hi-source">
+                  <Check size={14} aria-hidden="true" />
+                  <span>{tx('Handing in: {name}', { name: picked.name })}</span>
+                  <button type="button" className="btn btn-sm" onClick={() => { setPicked(null); setValue('') }}>{tx('Change')}</button>
+                </div>
+              )}
+              {!chosen && !mine && !linkOpen && (
+                <button type="button" className="co-link" onClick={() => setLinkOpen(true)}>{tx('or paste a link')}</button>
+              )}
+              {!chosen && linkOpen && field}
+            </>
+          )
         })()}
 
         {err && <div className="form-error">{err}</div>}

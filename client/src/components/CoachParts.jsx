@@ -422,12 +422,28 @@ export function More({ children, note = '' }) {
 
 // ---- what changed, said once --------------------------------------------------------
 // The team's own words in the survey: "updates too often" — and unannounced.
-// So a release that changes how something is done says so in a few lines, the
-// first time each person opens My Day after it, and never again once they
-// press "Got it". One id a release; the lines are that release's.
+// So a release that changes how something is done says so in a few lines —
+// the first item of the bell, with a badge until the bell is opened, and
+// gone once it has been (D-06, the TZ of 19 October 2026: the card on My Day
+// pushed the start-here card below the fold on a 900 px screen). One id a
+// release; the lines are that release's. track-suite pins the line about
+// what the board records.
 const NEWS = {
-  id: 'r19',
+  id: 'r26',
   lines: () => [
+    tx('Edit opens the same form a new task uses, at the step you pressed; Save writes that step and nothing else. The full sheet is behind “All fields”.'),
+    tx('In a new task the brief never opens blank: its lines are drawn while they load. The piece’s colour is the brief’s last row, if your calendar colours pieces by your own choice.'),
+    tx('A step with nobody on it is on your day now: an admin sees “Nobody holds these” first on My Day; a maker’s piece sent on with no editor, operator or designer is under “Your move”, and the task window names the person in one press.'),
+    tx('Days keep their order: a piece cannot go out before it is filmed or edited, and an edit is not due before the shoot. A new task with no day lands on today, and one with no owner belongs to whoever made it.'),
+    tx('What the board refuses, it now says in your language.'),
+    tx('The counts beside the channels and your day refresh right after a move, and whoever is replaced on a task is told.'),
+    tx('Uploads are steadier: a file already in the task’s Drive is handed in with one press, a stalled upload offers “Try again”, and a busy server pauses an upload instead of failing it.'),
+    tx('“What changed” lives in the bell now, with a badge until you open it. My Day starts with your card.'),
+    tx('Settings has four tabs — Board, Team, Integrations, Records — and nothing under “More”. Every page of the old Admin panel is on one of them.'),
+    tx('Team is one page: People, Workload and Access are three buttons at the top. Hiring and Candidates are gone.'),
+    tx('Numbers is one page: Month, People and Pay are three buttons at the top. Your own pay is under your profile.'),
+    tx('Sprints has left the menu and retires on 3 November. The ideas from its backlog are kept in Settings → Records.'),
+    tx('The calendar is one door for everybody. Shooting, Releasing and — if you film, edit or design — Mine are the buttons at the top of it.'),
     tx('Every task is a line of stops — Idea, Shoot, Editing, Out — and the stop it is on is lit. The same line is on My Day, over the task window and in the new task form.'),
     tx('On My Day the small line in front of a title shows where the piece is; a ring in your colour is the stop that is yours.'),
     tx('In a new task, When and Who are one step, Plan: press a stop on the line to give it its day and its person.'),
@@ -447,18 +463,16 @@ const NEWS = {
     tx('To make the board easier, it now records which pages you open and what you press — never what you type.'),
   ],
 }
-export function WhatsNew() {
-  const [seen, setSeen] = useState(() => { try { return localStorage.getItem('satashkent_news') === NEWS.id } catch { return true } })
-  if (seen) return null
-  const close = () => {
-    try { localStorage.setItem('satashkent_news', NEWS.id) } catch { /* private window */ }
-    setSeen(true)
-  }
+export const newsSeen = () => { try { return localStorage.getItem('satashkent_news') === NEWS.id } catch { return true } }
+export const markNewsSeen = () => { try { localStorage.setItem('satashkent_news', NEWS.id) } catch { /* private window */ } }
+// The release's lines, drawn by the bell (NotificationsBell.jsx) as its
+// first item while the person has not opened it since the release.
+export function WhatsNew({ onClose }) {
   return (
-    <section className="co-news" aria-label={tx('What changed')}>
+    <section className="notif-news" aria-label={tx('What changed')}>
       <b>{tx('What changed')}</b>
       <ul>{NEWS.lines().map((line) => <li key={line}>{line}</li>)}</ul>
-      <button type="button" className="co-btn co-btn-s co-btn-sm" onClick={close}>{tx('Got it')}</button>
+      <button type="button" className="btn btn-sm" onClick={onClose}>{tx('Got it')}</button>
     </section>
   )
 }

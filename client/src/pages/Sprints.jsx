@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import {
   Timer, Plus, X, Check, Trash2, GripVertical, Link2, FileUp, AlignLeft,
   LayoutGrid, Rows3, Lock, Circle, ArrowUpDown, Lightbulb, HelpCircle,
-  ChevronLeft, ChevronRight, History, Undo2, ScrollText, CalendarClock,
+  ChevronLeft, ChevronRight, History, Undo2, ScrollText, CalendarClock, AlertTriangle,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { toast } from '../lib/toast.js'
@@ -12,6 +12,27 @@ import Modal from '../components/Modal.jsx'
 import Fold from '../components/Fold.jsx'
 import { tr as tx, useT } from '../lib/i18n.jsx'
 import { SPRINT_GUIDE } from '../lib/sprintGuide.js'
+import { longDayLabel } from '../lib/constants.js'
+
+// Sprints is retiring (B-08, the TZ of 19 October 2026): eight opens in a
+// week, all by the admin, while the team plans on the channel boards and the
+// calendar. It left every menu on 20 October; the two pages stay by their
+// addresses until this day, with the banner below, and the backlog's ideas
+// are kept as a dated note under Settings → Records (History) — written by
+// the server from the ideas themselves, so nothing anybody wrote is lost when
+// the pages and their tables go.
+export const SPRINTS_RETIRE = '2026-11-03'
+export function RetiringBanner() {
+  return (
+    <div className="sp-retiring" role="status">
+      <AlertTriangle size={16} aria-hidden="true" />
+      <span>
+        {tx('Sprints is retiring on {day}. Ideas from the backlog are kept in Settings → Records.', { day: longDayLabel(SPRINTS_RETIRE) })}{' '}
+        <Link to="/admin?tab=history">{tx('Open Records')}</Link>
+      </span>
+    </div>
+  )
+}
 
 // The weekly sprint board.
 //
@@ -87,6 +108,8 @@ function GuideModal({ onClose }) {
 export function SprintTabs() {
   const [guide, setGuide] = useState(false)
   return (
+    <>
+    <RetiringBanner />
     <div className="sp-tabs">
       <NavLink end to="/sprints" className={({ isActive }) => 'sp-tab' + (isActive ? ' active' : '')}>
         <Timer size={14} /> {tx('Sprint')}
@@ -100,6 +123,7 @@ export function SprintTabs() {
       </button>
       {guide && <GuideModal onClose={() => setGuide(false)} />}
     </div>
+    </>
   )
 }
 
